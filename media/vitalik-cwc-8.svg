@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="391" viewBox="0 0 600 391" font-family="Helvetica, Arial, sans-serif" class="svg-scope-16p8nd0">
+<style>.svg-scope-16p8nd0 text { font-size:10px; fill:#1a1a1a }
+.svg-scope-16p8nd0 .hdr { font-size:11px; font-weight:bold }
+.svg-scope-16p8nd0 .seclab { font-weight:bold }
+.svg-scope-16p8nd0 line { stroke:#999; stroke-width:1 }</style>
+<rect width="600" height="391" fill="#fff"/>
+<rect x="0" y="24" width="600" height="188" fill="#eef8f0"/>
+<rect x="0" y="212" width="600" height="179" fill="#fdf0f0"/>
+<rect x="0" y="0" width="600" height="24" fill="#e8e8ee"/>
+<text x="34" y="16" class="hdr">Ethereum in 2015</text>
+<text x="321" y="16" class="hdr">Ethereum in 2030</text>
+<line x1="0" y1="0" x2="600" y2="0"/>
+<line x1="0" y1="24" x2="600" y2="24"/>
+<line x1="26" y1="59" x2="600" y2="59"/>
+<line x1="26" y1="107" x2="600" y2="107"/>
+<line x1="26" y1="142" x2="600" y2="142"/>
+<line x1="26" y1="177" x2="600" y2="177"/>
+<line x1="0" y1="212" x2="600" y2="212"/>
+<line x1="26" y1="260" x2="600" y2="260"/>
+<line x1="26" y1="308" x2="600" y2="308"/>
+<line x1="26" y1="343" x2="600" y2="343"/>
+<line x1="0" y1="391" x2="600" y2="391"/>
+<line x1="0" y1="0" x2="0" y2="391"/>
+<line x1="26" y1="0" x2="26" y2="391"/>
+<line x1="313" y1="0" x2="313" y2="391"/>
+<line x1="600" y1="0" x2="599" y2="391"/>
+<text x="13.0" y="125.0" text-anchor="middle" class="seclab" font-size="18" fill="#1a7f37">+</text>
+<text x="13.0" y="308.5" text-anchor="middle" class="seclab" font-size="18" fill="#b91c1c">−</text>
+<text x="34" y="39">100% uptime</text>
+<text x="321" y="39">100% uptime</text>
+<text x="34" y="74">Censorship resistance (aka. guaranteed transaction</text>
+<text x="34" y="87">inclusion)</text>
+<text x="321" y="74">Strong censorship resistance: guaranteed real-time</text>
+<text x="321" y="87">transaction inclusion (via FOCIL)</text>
+<text x="34" y="122">Guaranteed execution according to the rules as programmed</text>
+<text x="321" y="122">Guaranteed execution according to the rules as programmed</text>
+<text x="34" y="157">Irreversibility</text>
+<text x="321" y="157">Irreversibility</text>
+<text x="321" y="192">Often stronger privacy than servers</text>
+<text x="34" y="227">Very high cost</text>
+<text x="321" y="227">High cost of general-purpose computation (many forms of</text>
+<text x="321" y="240">specialized computation have much lower overhead)</text>
+<text x="34" y="275">Privacy</text>
+<text x="321" y="275">Privacy of general-purpose computation (many</text>
+<text x="321" y="288">special-purpose applications have very strong privacy)</text>
+<text x="34" y="323">Latency (~17s for a block, ~200s for 12 confirmations)</text>
+<text x="321" y="323">Some latency (~4-8s for a slot, ~8-32s for finality)</text>
+<text x="34" y="358">Have to either run a big beefy node or trust someone</text>
+<text x="321" y="358">Have to run a node to get optimal guarantees, but</text>
+<text x="321" y="371">requirements are much lighter</text>
+</svg>

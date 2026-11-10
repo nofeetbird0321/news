@@ -1,0 +1,15 @@
+{
+  "protected_fields": [
+    "id",
+    "date",
+    "published_at",
+    "ingested_at",
+    "source",
+    "original"
+  ],
+  "sha256_by_id": {
+    "simonw-census-btos-super-intelligence": "a7f936f814352621e9e88318c9777abef50ddf249bcde96d3dd1784fc9088344",
+    "simonw-muse-ember-pricing": "32b1902c9801ff84ae640a199cd31043931c0261386d95d31cefd2957362a28b",
+    "vitalik-cryptographic-world-computer": "bfd7e8171d6f4e7ffa6d44ff4749a57b6c4b8e535e4a9bee3a392efaf0cdb04d"
+  }
+}

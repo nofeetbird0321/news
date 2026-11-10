@@ -1,0 +1,41 @@
+[
+  {
+    "id": "vitalik-cryptographic-world-computer",
+    "date": "2026-09-27",
+    "title": "Vitalik：以太坊正在从“区块链”变成“密码学世界计算机”",
+    "dek": "Vitalik Buterin 拿比特币白皮书逐节对照 2010 年和 2030 年的区块链，认为后 Lean 升级的以太坊还叫区块链，很大程度上是历史原因。",
+    "url": "/a/vitalik-cryptographic-world-computer",
+    "source_url": "https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html",
+    "tags": [
+      "Web3",
+      "以太坊",
+      "密码学"
+    ]
+  },
+  {
+    "id": "simonw-census-btos-super-intelligence",
+    "date": "2026-11-02",
+    "title": "美国人口普查局的企业 AI 调查改了两次问法，最新一次把 AI 改叫“超级智能”",
+    "dek": "Simon Willison 用 2026 年 10 月 22 日的 BTOS 数据重画企业 AI 使用率图：250 人以上的企业约 40% 在用，但问法变过，前后数据不能直接比较。",
+    "url": "/a/simonw-census-btos-super-intelligence",
+    "source_url": "https://simonwillison.net/2026/Nov/2/census-bureau-super-intelligence/",
+    "tags": [
+      "数据",
+      "公共数据",
+      "AI 采用率"
+    ]
+  },
+  {
+    "id": "simonw-muse-ember-pricing",
+    "date": "2026-11-10",
+    "title": "Meta 小模型 Muse Ember：单价与 Haiku、Luna 持平，每任务成本落在 Pareto 线上",
+    "dek": "Simon Willison 对比了三款小模型的长提示加价门槛，并用 Artificial Analysis 的每任务成本图说明为什么单价不再够用。",
+    "url": "/a/simonw-muse-ember-pricing",
+    "source_url": "https://simonwillison.net/2026/Nov/10/muse-ember/",
+    "tags": [
+      "AI",
+      "模型定价",
+      "评测"
+    ]
+  }
+]

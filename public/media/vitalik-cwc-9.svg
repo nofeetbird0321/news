@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="866" height="592" viewBox="0 -8 866 592" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrGray" markerWidth="18" markerHeight="18" refX="14" refY="9" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M2,2 L16,9 L2,16 Z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect x="0" y="-8" width="866" height="592" fill="#ffffff"/>
+  <g stroke="#2563eb" stroke-width="2" fill="#dbeafe">
+    <rect x="20" y="20" width="88" height="52" rx="6"/>
+    <rect x="20" y="106" width="88" height="52" rx="6"/>
+    <rect x="20" y="192" width="88" height="52" rx="6"/>
+    <rect x="20" y="278" width="88" height="52" rx="6"/>
+    <rect x="20" y="364" width="88" height="52" rx="6"/>
+  </g>
+  <g font-size="16" font-weight="bold" fill="#1e3a8a" text-anchor="middle">
+    <text x="64" y="51" letter-spacing="-1.1">A → B</text>
+    <text x="64" y="137" letter-spacing="-1.1">B → C</text>
+    <text x="64" y="223" letter-spacing="-1.1">C → D</text>
+    <text x="64" y="309" letter-spacing="-1.1">D → E</text>
+    <text x="64" y="395" letter-spacing="-1.1">E → F</text>
+  </g>
+  <g stroke="#475569" stroke-width="2" fill="none" marker-end="url(#arrGray)">
+    <path d="M 64,75 V 103"/>
+    <path d="M 64,161 V 189"/>
+    <path d="M 64,247 V 275"/>
+    <path d="M 64,333 V 361"/>
+    <path d="M 64,419 V 500"/>
+  </g>
+  <g fill="#ffedd5" stroke="#ea580c" stroke-width="2">
+    <path d="M 632,24 L 632,24 A 4 4 0 0 1 636,20 L 672,20 A 4 4 0 0 1 676,24 L 676,68 A 4 4 0 0 1 672,72 L 592,72 A 4 4 0 0 1 588,68 L 588,50.5 A 4 4 0 0 1 592,46.5 L 628,46.5 A 4 4 0 0 0 632,42.5 Z"/>
+    <path d="M 632,110 L 632,110 A 4 4 0 0 1 636,106 L 672,106 A 4 4 0 0 1 676,110 L 676,154 A 4 4 0 0 1 672,158 L 592,158 A 4 4 0 0 1 588,154 L 588,136.5 A 4 4 0 0 1 592,132.5 L 628,132.5 A 4 4 0 0 0 632,128.5 Z"/>
+    <path d="M 632,196 L 632,196 A 4 4 0 0 1 636,192 L 672,192 A 4 4 0 0 1 676,196 L 676,240 A 4 4 0 0 1 672,244 L 592,244 A 4 4 0 0 1 588,240 L 588,222.5 A 4 4 0 0 1 592,218.5 L 628,218.5 A 4 4 0 0 0 632,214.5 Z"/>
+    <path d="M 632,282 L 632,282 A 4 4 0 0 1 636,278 L 672,278 A 4 4 0 0 1 676,282 L 676,326 A 4 4 0 0 1 672,330 L 592,330 A 4 4 0 0 1 588,326 L 588,308.5 A 4 4 0 0 1 592,304.5 L 628,304.5 A 4 4 0 0 0 632,300.5 Z"/>
+    <path d="M 632,368 L 632,368 A 4 4 0 0 1 636,364 L 672,364 A 4 4 0 0 1 676,368 L 676,412 A 4 4 0 0 1 672,416 L 592,416 A 4 4 0 0 1 588,412 L 588,394.5 A 4 4 0 0 1 592,390.5 L 628,390.5 A 4 4 0 0 0 632,386.5 Z"/>
+  </g>
+  <g font-size="16" fill="#9a3412" text-anchor="middle">
+    <text x="654" y="34" font-size="13">Here's</text>
+    <text x="654" y="49.4" font-size="13">why</text>
+    <text x="632" y="64.8" font-size="13">that's allowed</text>
+    <text x="654" y="120" font-size="13">Here's</text>
+    <text x="654" y="135.4" font-size="13">why</text>
+    <text x="632" y="150.8" font-size="13">that's allowed</text>
+    <text x="654" y="206" font-size="13">Here's</text>
+    <text x="654" y="221.4" font-size="13">why</text>
+    <text x="632" y="236.8" font-size="13">that's allowed</text>
+    <text x="654" y="292" font-size="13">Here's</text>
+    <text x="654" y="307.4" font-size="13">why</text>
+    <text x="632" y="322.8" font-size="13">that's allowed</text>
+    <text x="654" y="378" font-size="13">Here's</text>
+    <text x="654" y="393.4" font-size="13">why</text>
+    <text x="632" y="408.8" font-size="13">that's allowed</text>
+  </g>
+  <g fill="#dbeafe" stroke="#2563eb" stroke-width="2">
+    <rect x="570" y="2" width="46.2" height="25.5" rx="4"/>
+    <rect x="570" y="88" width="46.2" height="25.5" rx="4"/>
+    <rect x="570" y="174" width="46.2" height="25.5" rx="4"/>
+    <rect x="570" y="260" width="46.2" height="25.5" rx="4"/>
+    <rect x="570" y="346" width="46.2" height="25.5" rx="4"/>
+  </g>
+  <g font-size="16" font-weight="bold" fill="#1e3a8a" text-anchor="middle">
+    <text x="592" y="20.25" letter-spacing="-1.1">A → B</text>
+    <text x="592" y="106.25" letter-spacing="-1.1">B → C</text>
+    <text x="592" y="192.25" letter-spacing="-1.1">C → D</text>
+    <text x="592" y="278.25" letter-spacing="-1.1">D → E</text>
+    <text x="592" y="364.25" letter-spacing="-1.1">E → F</text>
+  </g>
+  <path d="M 570,14.75 H 560 V 500" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#arrGray)"/>
+  <g stroke="#475569" stroke-width="2">
+    <path d="M 570,100.75 H 560"/>
+    <path d="M 570,186.75 H 560"/>
+    <path d="M 570,272.75 H 560"/>
+    <path d="M 570,358.75 H 560"/>
+  </g>
+  <g fill="#e5e7eb" stroke="#6b7280" stroke-width="2">
+    <rect x="720" y="63" width="52" height="52" rx="6"/>
+    <rect x="794" y="192" width="52" height="52" rx="6"/>
+    <rect x="720" y="321" width="52" height="52" rx="6"/>
+    <rect x="794" y="321" width="52" height="52" rx="6"/>
+  </g>
+  <g fill="none" stroke="#6b7280" stroke-width="1.6">
+    <path d="M 676,46 H 701 V 89 H 720"/>
+    <path d="M 676,132 H 701 V 89 H 720"/>
+    <path d="M 772,89 H 820 V 192"/>
+    <path d="M 676,218 H 794"/>
+    <path d="M 820,244 V 321"/>
+    <path d="M 676,304 H 701 V 347 H 720"/>
+    <path d="M 676,390 H 701 V 347 H 720"/>
+    <path d="M 772,347 H 794"/>
+  </g>
+  <path d="M 820,373 V 509" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#arrGray)"/>
+  <rect x="10" y="502" width="476" height="72" rx="8" fill="#eef2ff" stroke="#4338ca" stroke-width="2"/>
+  <g fill="#dbeafe" stroke="#2563eb" stroke-width="2">
+    <rect x="20" y="512" width="88" height="52" rx="6"/>
+    <rect x="112" y="512" width="88" height="52" rx="6"/>
+    <rect x="204" y="512" width="88" height="52" rx="6"/>
+    <rect x="296" y="512" width="88" height="52" rx="6"/>
+    <rect x="388" y="512" width="88" height="52" rx="6"/>
+  </g>
+  <g font-size="16" font-weight="bold" fill="#1e3a8a" text-anchor="middle">
+    <text x="64" y="544" letter-spacing="-1.1">A → B</text>
+    <text x="156" y="544" letter-spacing="-1.1">B → C</text>
+    <text x="248" y="544" letter-spacing="-1.1">C → D</text>
+    <text x="340" y="544" letter-spacing="-1.1">D → E</text>
+    <text x="432" y="544" letter-spacing="-1.1">E → F</text>
+  </g>
+  <rect x="522" y="502" width="334" height="72" rx="8" fill="#eef2ff" stroke="#4338ca" stroke-width="2"/>
+  <g fill="#dbeafe" stroke="#2563eb" stroke-width="2">
+    <rect x="532" y="525.25" width="46.2" height="25.5" rx="4"/>
+    <rect x="582" y="525.25" width="46.2" height="25.5" rx="4"/>
+    <rect x="632" y="525.25" width="46.2" height="25.5" rx="4"/>
+    <rect x="682" y="525.25" width="46.2" height="25.5" rx="4"/>
+    <rect x="732" y="525.25" width="46.2" height="25.5" rx="4"/>
+  </g>
+  <g font-size="16" font-weight="bold" fill="#1e3a8a" text-anchor="middle">
+    <text x="554" y="543" letter-spacing="-1.1">A → B</text>
+    <text x="604" y="543" letter-spacing="-1.1">B → C</text>
+    <text x="654" y="543" letter-spacing="-1.1">C → D</text>
+    <text x="704" y="543" letter-spacing="-1.1">D → E</text>
+    <text x="754" y="543" letter-spacing="-1.1">E → F</text>
+  </g>
+  <rect x="794" y="512" width="52" height="52" rx="6" fill="#e5e7eb" stroke="#6b7280" stroke-width="2"/>
+</svg>

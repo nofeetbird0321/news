@@ -1,0 +1,148 @@
+{
+  "id": "vitalik-cryptographic-world-computer",
+  "date": "2026-09-27",
+  "ingested_at": "2026-11-10T23:35:00+08:00",
+  "source": {
+    "type": "web",
+    "url": "https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html",
+    "author": "Vitalik Buterin",
+    "handle": "VitalikButerin",
+    "title_en": "The cryptographic world computer",
+    "related_url": "https://strawmap.org/"
+  },
+  "title": "Vitalik：以太坊正在从“区块链”变成“密码学世界计算机”",
+  "dek": "Vitalik Buterin 拿比特币白皮书逐节对照 2010 年和 2030 年的区块链，认为后 Lean 升级的以太坊还叫区块链，很大程度上是历史原因。",
+  "tags": [
+    "Web3",
+    "以太坊",
+    "密码学"
+  ],
+  "original": {
+    "lang": "en",
+    "title": "The cryptographic world computer",
+    "text_md": "We talk about Ethereum as “a blockchain”, as though it is fundamentally the same technology as the Bitcoin that Satoshi Nakomoto created back in 2009. In many ways it is, and in some ways even the “lean Ethereum” of the future that is [being built](https://leanroadmap.org/) along the lines of the [Strawmap](https://strawmap.org/) retains the core trappings of a blockchain. But at the same time, the technology has evolved greatly over the last fifteen years, and is poised to evolve even more over the next three - to the point where it becomes fair to call the thing that Ethereum is moving towards a qualitatively different kind of system.\n\nThe Ethereum of today has general-purpose computation, proof of stake, onchain applications using zero-knowledge proofs and L2s that provide scaling and privacy. The Ethereum of tomorrow will have computation with a tunable dial between extreme scale and full generality, multiple forms of multi-participant block construction, a highly optimized form of proof of stake, and zero-knowledge proofs baked in playing key roles at the base layer.\n\nThis post will walk through some of the most important fundamental differences between blockchains in 2010 and blockchains in 2030, both from the point of view of the technology and from the point of view of what properties you can expect to have as a user.\n\nTo start off, let’s go through the original Bitcoin whitepaper, section by section, and see how this compares to Ethereum - in 2015 (<mark style=\"background-color: rgb(255, 255, 0)\">yellow</mark>), 2025 (<mark style=\"background-color: rgb(0, 255, 0)\">green</mark>) and 2030 (<mark style=\"background-color: rgb(159, 197, 232)\">blue</mark>).\n\n[Figure 1: inline image in the original post, shown in the media section above]\n\n[Figure 2: inline image in the original post, shown in the media section above]\n\n[Figure 3: inline image in the original post, shown in the media section above]\n\n[Figure 4: inline image in the original post, shown in the media section above]\n\n[Figure 5: inline image in the original post, shown in the media section above]\n\nThere are large changes to basically every section. To make things more compact, let’s make it a table:\n\n[Figure 6: inline image in the original post, shown in the media section above]\n\nPretty much every core property of what it means to be a blockchain either has fundamentally changed or soon will fundamentally change:\n\n* **Verification**: download and re-execute → PeerDAS sample and verify a SNARK\n* **Consensus**: PoW → PoS → much better optimized PoS\n* **Block construction authority**: single miner makes block → multi-party block construction\n\nAs an AI might say, the only *honest* conclusion (ok fine, the *honest punchline*) is that a modern cryptographic network like the post-Lean-upgrade Ethereum is called a “blockchain” to a large extent for historical reasons. In reality it’s a hybrid construction that merges together two strands:\n\n1. Core Satoshian ideas\n2. New powerful cryptographic machinery that emerged out of 50 years of academia and did not even exist (or was not mature) in 2009\n\n[Figure 7: inline image in the original post, shown in the media section above]\n\n<p style=\"text-align: center\"><em class=\"select-text pointer-events-auto\">How much crypto is in crypto? 2009 vs 2020 vs 2030</em></p>\n\nCryptography is not the only science that matters. Also important are: [formal verification](https://vitalik.eth.limo/general/2026/05/18/fv.html), database theory, peer-to-peer networking theory, information theory, economics and much more. But all of those things are compatible with the fundamental core of “everyone tries to make the next block with valid PoW, one guy succeeds, broadcasts it, everyone else downloads it and re-executes, repeat”. The cryptographic changes are not.\n\nNow, what does this mean for users?\n\nThe most important conclusion is that the set of tradeoffs for users is radically changing:\n\n[Figure 8: inline image in the original post, shown in the media section above]\n\nWhen building applications, **structure of computation** is starting to matter a lot. In a simple blockchain, 1 byte = 1 byte and 1 gas = 1 gas. In the architectures of the future, the same amount of computation will cost you much more if you shove it all into one inscrutable serially-executed transaction, and much less if you put it into well-encapsulated dependencies that can be parallelized or pruned, ideally before the transaction even enters the final block. This affects the incentives of developers, and will over time affect the structure of all applications using Ethereum: **perhaps in the long run, we will converge toward programming patterns where information directly related to describing non-commutative state changes and ordering is posted onchain, and everything else is aggregated before it even gets included into a block**.\n\n[Figure 9: inline image in the original post, shown in the media section above]\n\n<p style=\"text-align: center\"><em class=\"select-text pointer-events-auto\">Structuring computation lets the blockchain more effectively focus on its job.</em></p>\n\nPerhaps the most important shift is that **the decentralized nature of the network is shifting from being purely a burden incurred in the name of safety and robustness to at least sometimes, in a few limited cases, being a strength even from a performance perspective**. The decentralized network allows larger volumes of data to be stored in parallel. It allows a high volume of computation to happen in parallel, in many cases inside the mempool. In a few cases, it *increases* privacy, because only decentralized networks can effectively hide metadata (eg. *where data and requests are coming from*).\n\nBack in the mid-2010s, this was an early dream of Ethereum: that we could decentralize not just for robustness but also to _increase_ scale. If centralized systems can split up work between different participants to increase their performance, so should we. Back then, this was not viable for one primary reason: the missing ingredient was _verification_. If you split up work, you have to verify that each unit of work was done correctly. Early designs attempted to patch this with randomly sampled committees, but they all ran into the same bottleneck: first, committees are complicated to set up and expensive and greatly increase latency, second, there is no recourse if the committee fails. Now, with modern cryptography, this problem is solved, and the overhead factor of that solution is decreasing month by month.\n\nAnother area to watch for where decentralization can potentially improve performance properties is latency. Ethereum itself will never have latency that competes with servers, but infrastructure built around it could.\n\nIn general, creating a stronger decentralized layer in the middle between users and a chain, that is not itself a chain, could make Ethereum very powerful without compromising any of the chain’s fundamental properties.\n\nLater in the future, there is the possibility that Ethereum will go through one further shift - [the](https://vitalik.eth.limo/general/2026/06/29/obfuscation1.html) possible [rise](https://vitalik.eth.limo/general/2026/07/28/obfuscation_part_ii_diamond_io.html) of [obfuscation](https://vitalik.eth.limo/general/2026/08/21/obfuscation_part_iii_local_mixing.html) (iO). The holy grail here is that viable obfuscation can eliminate the tradeoff between privacy and generalization: you can have fully generalized computation involving an unbounded number of (asynchronous) participants in a fully secure and encrypted form. Even weak versions of obfuscation have many applications in eg. encrypted mempools. But all of the conclusions in this post will apply long before any of that becomes available.\n\nThis is the \"cryptographic world computer”: a shift from Ethereum as solely a ledger onto which you can indiscriminately dump computation and data that gets executed, to an architecture that combines blockchains with cryptographic privacy and verification, and powerful decentralized off-chain components.\n\nThere are still many challenges in fully building out this design. Making zero knowledge proofs efficient enough and safe enough is difficult, but it is [encapsulated complexity](https://vitalik.eth.limo/general/2022/02/28/complexity.html) and is already being heavily optimized with AI tools. The more difficult, and systemically complex, piece will likely be managing and parallelizing access to very large amounts of state. There are already many ideas on the horizon for how to handle this, though they need to be refined especially as we learn more about what applications will be running in the future.\n\nIf you look at [the Strawmap](https://strawmap.org/), Hegota - the fork planned for next year - is likely to be Ethereum’s last “normal” fork, with features and technology and development process that would be recognizable to someone in 2015. Everything after that involves recursive STARKs, automated formal verification, highly optimized consensus algorithms, and making it all quantum-safe. With PeerDAS, Ethereum began its transition from being just a blockchain to being something much more powerful. Starting after Hegota, this transformation becomes Ethereum’s _primary story_. The final outcome of this: much more cheap, scalable and private high-security computation than anything that could be done with the previous era’s technology alone. The cryptographic world computer.",
+    "note": "原文的九张配图以内嵌 data URI 形式发布，没有独立图片地址；本站逐字节转存到 /media/ 并在上方媒体区展示，正文中以 [Figure N] 标出原位置。原文 Markdown 取自作者博客仓库 vbuterin/blog 的 posts/the_cryptographic_world_computer.md。",
+    "media": [
+      {
+        "id": "cwc_fig1",
+        "type": "image",
+        "url": "https://news.nofeetbird.tech/media/vitalik-cwc-1.png",
+        "alt": "原文配图：比特币白皮书第 2 节“交易”的批注截图",
+        "source_note": "原文以内嵌 data URI 发布，没有独立地址；本站逐字节转存，sha256 2d9ff1a02a2fb70b25221eecb64e9064a4b8dcdd5b1a26111bda4d545df5bf83"
+      },
+      {
+        "id": "cwc_fig2",
+        "type": "image",
+        "url": "https://news.nofeetbird.tech/media/vitalik-cwc-2.png",
+        "alt": "原文配图：比特币白皮书第 4 节“工作量证明”的批注截图",
+        "source_note": "原文以内嵌 data URI 发布，没有独立地址；本站逐字节转存，sha256 ac9c20f70bb04044686f210da09b79e0f97b49a6182f59202f7c9ce56be267f0"
+      },
+      {
+        "id": "cwc_fig3",
+        "type": "image",
+        "url": "https://news.nofeetbird.tech/media/vitalik-cwc-3.png",
+        "alt": "原文配图：比特币白皮书第 5 节“网络”的批注截图",
+        "source_note": "原文以内嵌 data URI 发布，没有独立地址；本站逐字节转存，sha256 de55b8e895092f2875f0576f59dd83eed905c1ac4128d194abed2d4cf5aa58cb"
+      },
+      {
+        "id": "cwc_fig4",
+        "type": "image",
+        "url": "https://news.nofeetbird.tech/media/vitalik-cwc-4.png",
+        "alt": "原文配图：比特币白皮书第 7 节“回收磁盘空间”的批注截图",
+        "source_note": "原文以内嵌 data URI 发布，没有独立地址；本站逐字节转存，sha256 52739caf93c226030d26aff01388d94c9504776ae441b358076a98b9b421112c"
+      },
+      {
+        "id": "cwc_fig5",
+        "type": "image",
+        "url": "https://news.nofeetbird.tech/media/vitalik-cwc-5.png",
+        "alt": "原文配图：比特币白皮书第 10 节“隐私”的批注截图",
+        "source_note": "原文以内嵌 data URI 发布，没有独立地址；本站逐字节转存，sha256 79efd63f5bbeb435118dc62ea70c3aac7bc98a1328b861d310c091d0f541de60"
+      },
+      {
+        "id": "cwc_fig6",
+        "type": "image",
+        "url": "https://news.nofeetbird.tech/media/vitalik-cwc-6.svg",
+        "alt": "原文配图：2010 年与 2030 年区块链做法对照表",
+        "source_note": "原文以内嵌 data URI 发布，没有独立地址；本站逐字节转存，sha256 b4c7c75e1cc29a1f44a93eefacde1a493269fa78041fc4810af0f484de4ae502"
+      },
+      {
+        "id": "cwc_fig7",
+        "type": "image",
+        "url": "https://news.nofeetbird.tech/media/vitalik-cwc-7.png",
+        "alt": "原文配图：密码学学术成果与区块链系统的时间线",
+        "source_note": "原文以内嵌 data URI 发布，没有独立地址；本站逐字节转存，sha256 51633e3350ea3200fa79a2d0137a027fbfe47420f14a1ed3873d60259ada16d8"
+      },
+      {
+        "id": "cwc_fig8",
+        "type": "image",
+        "url": "https://news.nofeetbird.tech/media/vitalik-cwc-8.svg",
+        "alt": "原文配图：2015 年与 2030 年以太坊的优缺点对照表",
+        "source_note": "原文以内嵌 data URI 发布，没有独立地址；本站逐字节转存，sha256 64ba16f9a641668bbebc1b61c98ff488f2c961d682c0fd18e077b66a0b28160d"
+      },
+      {
+        "id": "cwc_fig9",
+        "type": "image",
+        "url": "https://news.nofeetbird.tech/media/vitalik-cwc-9.svg",
+        "alt": "原文配图：结构化计算示意图",
+        "source_note": "原文以内嵌 data URI 发布，没有独立地址；本站逐字节转存，sha256 18d186f06f62ef7108a58efa17a0f1ee8a212ebe8b3edb692d98c4506c94de6c"
+      }
+    ]
+  },
+  "body_md": "人们习惯把以太坊叫作“区块链”，好像它和中本聪 2009 年创造的比特币本质上是同一种技术。Vitalik Buterin 认为，在很多方面确实如此；即便是正在按 Strawmap 路线图建设的未来“精简以太坊”（lean Ethereum），也保留了区块链的核心特征。但这项技术在过去十五年里已经演化了很多，未来三年还会演化得更多，到那时，把以太坊正在走向的东西称为一种性质不同的系统，是说得通的。\n\n今天的以太坊有通用计算、权益证明、使用零知识证明的链上应用，以及提供扩容和隐私的 L2。明天的以太坊会有一个可调的计算旋钮，在极致规模和完全通用之间取舍；会有多种形式的多方共同出块；会有高度优化的权益证明；零知识证明会内置到基础层，并承担关键角色。\n\n这篇文章要梳理的，是 2010 年的区块链和 2030 年的区块链之间最重要的几项根本差异，既从技术角度看，也从用户能期待哪些性质的角度看。\n\n## 拿比特币白皮书逐节对照\n\n他先把比特币白皮书逐节过了一遍，在截图上用三种颜色标出以太坊在 2015 年（黄色）、2025 年（绿色）和 2030 年（蓝色）的对应情况，再在旁边写批注。\n\n五张截图里的批注要点如下（文字取自图中批注）：\n\n- **第 2 节“交易”**：白皮书把电子币定义为一串数字签名，每个所有者通过对上一笔交易的哈希签名来转移币。批注指出，状态和历史现在已经明确分开；签名将在链下聚合，每个区块在链上只留一个，而且很多时候会换成零知识证明。\n- **第 4 节“工作量证明”**：以太坊自 2022 年起改用权益证明，用验证者签名代替寻找 nonce。交易不再作为一整块数据打包，签名、证明等依赖会被拆出来，在内存池里聚合。白皮书隐含的假设是区块由一个参与者构建；现实中这一点已经被大幅削弱，比如权限有限的矿池、协议内的提议者与构建者分离，而 FOCIL 及之后可能的扩展，会把多方分权出块更深地写进协议。\n- **第 5 节“网络”**：白皮书缺少的部分包括内存池层面的聚合（EIP-8288 之后，只有入口节点能看到单个签名和证明）、发送者匿名（混合网络等）和分布式出块。有了 PeerDAS，每个节点只需下载每个区块的一小部分，目前覆盖 blob，以后会覆盖完整区块内容。以太坊的权益证明里，出块和分叉选择规则大体上是分开的，分叉选择主要依据证明投票而不是区块；投票是并行到来的，所以共识延迟大幅降低。\n- **第 7 节“回收磁盘空间”**：这一点已经做到，方式是把历史（交易）和状态明确分开。新的节省空间策略是，验证不再需要存储状态，改用 SNARK；很多情况下也不需要保存哈希，尤其是有了 SNARK 和 BAL 之后。白皮书还缺少对不同存储类型（数据库、平面文件等）及其优化取舍的明确考虑，以及分布式状态存储。\n- **第 10 节“隐私”**：白皮书的思路是公开所有交易，同时保持公钥匿名。批注指出，使用 ZK-SNARK 的隐私协议已经打破了“必须公开所有交易”这一前提，FOCIL 和 EIP-8288 会让这类交易更像一等公民；早在十年前就已经很清楚，有了现代数据分析工具，白皮书那种程度的隐私不够用。缺少的还有读取隐私（防止 RPC 查询暴露用户）和广播隐私（可以用混合网络等解决）；可编程隐私的最佳方案仍是开放问题。\n\n几乎每一节都有大的变化。为了更紧凑，他把这些变化整理成了一张表：\n\n| 问题 | 2010 年的做法 | 2030 年的做法 |\n| --- | --- | --- |\n| 怎么知道一笔交易得到了授权？ | 签名 | 有时是抗量子签名（或几个签名），有时是零知识证明 |\n| 怎么确定规范链？ | 工作量证明 | 带少数时隙终局性和可用链的权益证明 |\n| 怎么验证区块？ | 完整重新下载并重新计算 | SNARK 验证，加上用 PeerDAS 保证数据可用性 |\n| 一笔交易怎样进入区块？ | 用户 → 内存池 → 矿工 → 区块 | 用户 → 具备强隐私性的内存池 → FOCIL 参与者或构建者 → 区块；签名和证明很早就被剥离，先由内存池节点聚合，再由构建者聚合 |\n| 计算是什么结构？ | 线性，串行 | 并行：签名和证明在内存池内并行处理；gas 规则鼓励适合并行的流程 |\n| 客户端节点怎么节省空间？ | 修剪旧历史 | 只存一小部分历史；历史和状态分布式存储；往往不需要存储树的内部节点；不同对象用不同格式存储（数据库、平面文件等） |\n| 轻客户端能验证什么？ | 共识；有效性需要信任诚实多数 | 共识和有效性（数据可用性和计算都能验证） |\n| 写入隐私 | 假设 UTXO 图无法被有效分析 | ZK-SNARK |\n| 账户策略隐私 | 没有 | ZK-SNARK 加私有账户抽象 |\n| 读取隐私 | 自己运行全节点，否则没有 | 方案一：运行全节点（SNARK 去掉了计算要求，会更容易）；方案二：TEE+ORAM、PIR 等技术 |\n| 网络层隐私 | 假设大多数内存池节点诚实、不追踪用户 | 可以用洋葱路由、混合网络等 |\n\n## 区块链的核心属性几乎都在变\n\n在他看来，区块链的几乎每一项核心属性，要么已经根本改变，要么即将根本改变：\n\n- **验证**：下载并重新执行 → 用 PeerDAS 抽样，再验证一个 SNARK\n- **共识**：PoW → PoS → 优化得多的 PoS\n- **出块权**：单个矿工出块 → 多方共同构建区块\n\n他套用 AI 的口吻打趣说，唯一“诚实”的结论（好吧，是“诚实的笑点”）是：像完成 Lean 升级之后的以太坊这样的现代密码学网络，之所以还叫“区块链”，很大程度上是历史原因。实际上它是两股脉络合成的混合结构：\n\n1. 中本聪的核心思想\n2. 学术界五十年积累下来的强大密码学工具，它们在 2009 年还不存在，或者还不成熟\n\n原文接着用一张时间线图回答“加密货币里到底有多少密码学”，对比 2009、2020 和 2030 年。图的左侧是学术成果：哈希与签名（1970 年代末）、椭圆曲线（1985）、部分同步条件下的 DLS 共识（1988）、PCP 定理（1990）、私有信息检索（1995）、洋葱路由（1995），以及 2010 年代初第一批可用的 SNARK 和 2010 年代末第一批可用的 STARK。右侧是实际系统：BitTorrent（2001）、可复用工作量证明（2004）、比特币（2009）、以太坊（2013）、Zcash（2016）、2017 至 2018 年定型的现代区块链 PoS 设计，以及标为“未来”的终点，左侧多项成果都有箭头指向它。\n\n密码学并不是唯一重要的学科。形式化验证、数据库理论、点对点网络理论、信息论、经济学等等同样重要。但这些学科都和那套基本内核兼容：每个人都尝试用有效的工作量证明做出下一个区块，一个人成功并广播，其他人下载并重新执行，循环往复。密码学带来的变化与这套内核不兼容。\n\n## 用户面对的取舍正在改变\n\n最重要的结论是，用户面对的那套取舍正在发生根本变化。他用一张表对比了 2015 年和 2030 年以太坊的优点与缺点：\n\n| | 2015 年的以太坊 | 2030 年的以太坊 |\n| --- | --- | --- |\n| 优点 | 100% 在线 | 100% 在线 |\n| 优点 | 抗审查（即保证交易被打包） | 强抗审查：通过 FOCIL 保证交易实时被打包 |\n| 优点 | 保证按编写的规则执行 | 保证按编写的规则执行 |\n| 优点 | 不可逆 | 不可逆 |\n| 优点 | （无对应项） | 隐私往往比服务器更强 |\n| 缺点 | 成本很高 | 通用计算成本高（许多专用计算的开销低得多） |\n| 缺点 | 隐私 | 通用计算的隐私（许多专用应用已经有很强的隐私） |\n| 缺点 | 延迟（出块约 17 秒，12 个确认约 200 秒） | 有一定延迟（一个时隙约 4 至 8 秒，终局约 8 至 32 秒） |\n| 缺点 | 要么运行一台高配节点，要么信任别人 | 要获得最优保障仍需运行节点，但要求轻得多 |\n\n构建应用时，**计算的结构**开始变得很重要。在简单的区块链里，1 字节就是 1 字节，1 gas 就是 1 gas。在未来的架构里，同样多的计算，如果全塞进一笔难以拆解、串行执行的交易，成本会高得多；如果拆成封装良好、可以并行处理或剪枝的依赖，最好在交易进入最终区块之前就处理掉，成本会低得多。这会改变开发者的激励，也会逐渐改变所有以太坊应用的结构。他的推测是：**长期来看，编程模式也许会收敛到这样一种形态：只有直接描述不可交换的状态变化和顺序的信息上链，其余一切在进入区块之前就被聚合掉**。\n\n示意图的图注是：对计算做结构化，能让区块链更有效地专注于它的本职工作。\n\n## 去中心化开始带来性能\n\n也许最重要的转变是，**网络的去中心化，正从单纯为安全和稳健付出的代价，变成至少在少数有限场景下、连性能角度都算优势的东西**。去中心化网络能并行存储更大量的数据，能并行完成大量计算，很多时候就在内存池里完成。少数情况下它还能*提升*隐私，因为只有去中心化网络才能有效隐藏元数据，比如数据和请求来自哪里。\n\n回到 2010 年代中期，这曾是以太坊早期的一个梦想：去中心化不只是为了稳健，也是为了*扩大*规模。中心化系统能把工作分给不同参与者来提升性能，以太坊也应该能。当时做不到，主要原因只有一个：缺少*验证*。把工作拆开，就得验证每一份工作都做对了。早期设计尝试用随机抽样的委员会来补这个洞，但都卡在同一个瓶颈上：委员会搭建复杂、成本高，还会大幅增加延迟；而且委员会一旦失灵，没有任何补救手段。如今有了现代密码学，这个问题已经解决，这套方案的额外开销还在逐月下降。\n\n去中心化有望改善性能的另一个方向是延迟。以太坊本身的延迟永远比不上服务器，但围绕它搭建的基础设施有可能做到。\n\n总体来看，在用户和链之间建一层更强的去中心化中间层，而这一层本身不是链，可以让以太坊变得非常强大，同时不损害链的任何基本属性。\n\n## 更远处的混淆技术\n\n再往后，以太坊可能还会经历一次转变：混淆技术（iO）的兴起，这是他此前三篇文章讨论过的方向。这里的终极目标是，可用的混淆技术能消除隐私和通用性之间的取舍：在完全安全、加密的形式下进行完全通用的计算，参与方数量不受限制，而且可以异步参与。即使是较弱版本的混淆，也有很多用途，比如加密内存池。不过他强调，这篇文章的所有结论，在这些技术可用之前很久就已经成立。\n\n## 什么是“密码学世界计算机”\n\n这就是他所说的“密码学世界计算机”：以太坊从一个只能把计算和数据不加区分地丢上去执行的账本，转向一种把区块链与密码学隐私、密码学验证以及强大的去中心化链下组件结合起来的架构。\n\n要完整建成这套设计，挑战还很多。让零知识证明足够高效、足够安全很难，但这属于*封装起来的复杂性*，而且已经在借助 AI 工具大力优化。更难、系统复杂度也更高的部分，可能是管理并并行化对海量状态的访问。这方面已经有不少思路，但还需要打磨，尤其要随着对未来应用的了解加深而调整。\n\n按 Strawmap，明年计划中的分叉 Hegota 很可能是以太坊最后一次“常规”分叉：它的功能、技术和开发流程，2015 年的人都还认得出来。之后的一切都涉及递归 STARK、自动化形式化验证、高度优化的共识算法，以及让这一切抗量子。以太坊从 PeerDAS 开始，就已经从单纯的区块链转向更强大的东西；Hegota 之后，这场转型会成为以太坊的*主线故事*。最终结果是：比上一代技术单靠自身所能做到的，便宜得多、可扩展得多、也私密得多的高安全性计算。这就是密码学世界计算机。\n\n文中对以太坊应用开发者最直接可用的一条是：把签名、证明这类可以并行处理或提前聚合的部分拆出来，只把描述顺序和不可交换状态变化的信息留在链上，按他的判断，这样的结构在未来的架构里成本会低得多。",
+  "rewrite_media": [
+    {
+      "media_id": "cwc_fig1",
+      "placement": "after_paragraph",
+      "after_md": "他先把比特币白皮书逐节过了一遍，在截图上用三种颜色标出以太坊在 2015 年（黄色）、2025 年（绿色）和 2030 年（蓝色）的对应情况，再在旁边写批注。",
+      "evidence": "source_position_verified"
+    },
+    {
+      "media_id": "cwc_fig2",
+      "placement": "after_paragraph",
+      "after_md": "他先把比特币白皮书逐节过了一遍，在截图上用三种颜色标出以太坊在 2015 年（黄色）、2025 年（绿色）和 2030 年（蓝色）的对应情况，再在旁边写批注。",
+      "evidence": "source_position_verified"
+    },
+    {
+      "media_id": "cwc_fig3",
+      "placement": "after_paragraph",
+      "after_md": "他先把比特币白皮书逐节过了一遍，在截图上用三种颜色标出以太坊在 2015 年（黄色）、2025 年（绿色）和 2030 年（蓝色）的对应情况，再在旁边写批注。",
+      "evidence": "source_position_verified"
+    },
+    {
+      "media_id": "cwc_fig4",
+      "placement": "after_paragraph",
+      "after_md": "他先把比特币白皮书逐节过了一遍，在截图上用三种颜色标出以太坊在 2015 年（黄色）、2025 年（绿色）和 2030 年（蓝色）的对应情况，再在旁边写批注。",
+      "evidence": "source_position_verified"
+    },
+    {
+      "media_id": "cwc_fig5",
+      "placement": "after_paragraph",
+      "after_md": "他先把比特币白皮书逐节过了一遍，在截图上用三种颜色标出以太坊在 2015 年（黄色）、2025 年（绿色）和 2030 年（蓝色）的对应情况，再在旁边写批注。",
+      "evidence": "source_position_verified"
+    },
+    {
+      "media_id": "cwc_fig6",
+      "placement": "after_paragraph",
+      "after_md": "几乎每一节都有大的变化。为了更紧凑，他把这些变化整理成了一张表：",
+      "evidence": "source_position_verified"
+    },
+    {
+      "media_id": "cwc_fig7",
+      "placement": "after_paragraph",
+      "after_md": "原文接着用一张时间线图回答“加密货币里到底有多少密码学”，对比 2009、2020 和 2030 年。图的左侧是学术成果：哈希与签名（1970 年代末）、椭圆曲线（1985）、部分同步条件下的 DLS 共识（1988）、PCP 定理（1990）、私有信息检索（1995）、洋葱路由（1995），以及 2010 年代初第一批可用的 SNARK 和 2010 年代末第一批可用的 STARK。右侧是实际系统：BitTorrent（2001）、可复用工作量证明（2004）、比特币（2009）、以太坊（2013）、Zcash（2016）、2017 至 2018 年定型的现代区块链 PoS 设计，以及标为“未来”的终点，左侧多项成果都有箭头指向它。",
+      "evidence": "source_position_verified"
+    },
+    {
+      "media_id": "cwc_fig8",
+      "placement": "after_paragraph",
+      "after_md": "最重要的结论是，用户面对的那套取舍正在发生根本变化。他用一张表对比了 2015 年和 2030 年以太坊的优点与缺点：",
+      "evidence": "source_position_verified"
+    },
+    {
+      "media_id": "cwc_fig9",
+      "placement": "after_paragraph",
+      "after_md": "构建应用时，**计算的结构**开始变得很重要。在简单的区块链里，1 字节就是 1 字节，1 gas 就是 1 gas。在未来的架构里，同样多的计算，如果全塞进一笔难以拆解、串行执行的交易，成本会高得多；如果拆成封装良好、可以并行处理或剪枝的依赖，最好在交易进入最终区块之前就处理掉，成本会低得多。这会改变开发者的激励，也会逐渐改变所有以太坊应用的结构。他的推测是：**长期来看，编程模式也许会收敛到这样一种形态：只有直接描述不可交换的状态变化和顺序的信息上链，其余一切在进入区块之前就被聚合掉**。",
+      "evidence": "source_position_verified"
+    }
+  ]
+}

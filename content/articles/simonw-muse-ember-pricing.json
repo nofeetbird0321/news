@@ -1,0 +1,68 @@
+{
+  "id": "simonw-muse-ember-pricing",
+  "date": "2026-11-10",
+  "published_at": "2026-11-10T07:28:21+00:00",
+  "ingested_at": "2026-11-10T23:25:00+08:00",
+  "source": {
+    "type": "web",
+    "url": "https://simonwillison.net/2026/Nov/10/muse-ember/",
+    "author": "Simon Willison",
+    "handle": "simonw",
+    "title_en": "Introducing Our Smallest, Most Efficient Model: Muse Ember",
+    "related_url": "https://research.meta.ai/blog/muse-ember"
+  },
+  "title": "Meta 小模型 Muse Ember：单价与 Haiku、Luna 持平，每任务成本落在 Pareto 线上",
+  "dek": "Simon Willison 对比了三款小模型的长提示加价门槛，并用 Artificial Analysis 的每任务成本图说明为什么单价不再够用。",
+  "tags": [
+    "AI",
+    "模型定价",
+    "评测"
+  ],
+  "original": {
+    "lang": "en",
+    "title": "Introducing Our Smallest, Most Efficient Model: Muse Ember",
+    "text_md": "**[Introducing Our Smallest, Most Efficient Model: Muse Ember](https://research.meta.ai/blog/muse-ember)**. Meta AI just launched their entry in the Claude Haiku/GPT Luna category: Muse Ember, which they describe as:\n\n> [...] our smallest and most efficient model designed for complex reasoning execution and the work agents repeat all day: tool calls, coding subtasks, routing, extraction, and long document parsing.\n\nFor shorter prompts it's priced the same as GPT-6 Luna and Claude Haiku 5.5 - both are $0.10/million input tokens and $0.50/million output. Today's other big model release, Claude Fable 5.2, is *80x that price* at $8/$40.\n\nThe pricing is a little less straightforward as prompts get longer, though. Luna, Ember, and Haiku all support up to a million input tokens, but they also all have a threshold after which the price goes up. Taking *that* threshold into account Ember is priced between the two others:\n\n| Model | Prompt size | Input ($/M) | Cached input | Output |\n| --- | --- | --- | --- | --- |\n| GPT-6 Luna | ≤272k | $0.10 | $0.01 | $0.50 |\n| | >272k | $0.20 | $0.02 | $0.75 |\n| Muse Ember 1.0 | ≤200k | $0.10 | $0.004 | $0.50 |\n| | >200k | $0.30 | $0.012 | $1.50 |\n| Claude Haiku 5.5 | ≤100k | $0.10 | $0.01 | $0.50 |\n| | >100k | $0.50 | $0.05 | $2.50 |\n\nBut comparing price-per-token doesn't really make sense these days, when reasoning tokens mean that different models might use dramatically different numbers of tokens to solve the same problem.\n\nFor that, one measure that's useful is the Artificial Analysis.\n\n[Image 1: stacked bar chart, shown in the media section above]\n\nAnd even more useful than that is their Intelligence Index vs. Cost per Task chart, which shows the following for those three models:\n\n[Image 2: Intelligence Index vs. Cost per Task scatter plot, shown in the media section above]\n\nThe Muse Ember models sit right on that Pareto line - the line at which you can only improve one dimension by giving up another. Meta call this out in their announcement:\n\n> It also sits on the efficiency frontier of the full Artificial Analysis leaderboard: no model scores higher for less per task.\n\n(That grey dot on the Pareto line in the middle of the green area is GPT-6.1 Terra (low) - clearly I should be paying more attention to the Terra family!)\n\nMuse Ember has six reasoning levels - minimal, low, medium, high, xhigh, and max - so I [rendered six pelicans riding bicycles](https://tools.simonwillison.net/markdown-svg-renderer?url=https%3A%2F%2Fgist.github.com%2Fsimonw%2Fc7666e8a54d84f724ac8121f9fa6cc4d). The \"high\" reasoning level failed to return a full SVG, and the other SVGs were surprising in that the reasoning level didn't cleanly map to the visual quality of the response.\n\nHere's the \"max\" one, but the others are worth a look too:\n\n[Image 3: the \"max\" pelican SVG, shown in the media section above]\n\nThe Ember pelicans are comparable in quality to those [I got from Muse Wonder](https://tools.simonwillison.net/markdown-svg-renderer?url=https://gist.github.com/simonw/185cff7ff0b11379725abf7f78d5d2b2), which is [40x the price](https://www.llm-prices.com/#sel=muse-ember-1.0%2Cmuse-ember-1.0-200k%2Cmuse-wonder-1.0) of Muse Ember.",
+    "note": "原文的三张配图已移到上方媒体区，正文中以 [Image N] 标出原位置；价格表在原网页中用合并单元格排版，这里每个模型的第二行留空模型名。",
+    "media": [
+      {
+        "id": "ember_cost_chart",
+        "type": "image",
+        "url": "https://static.simonwillison.net/static/2026/artificial-analysis-haiku-class.webp",
+        "alt": "Stacked bar chart from Artificial Analysis comparing a cost in dollars across six models, each bar split into four unlabeled stacked segments, sorted from lowest to highest total. Claude Haiku 5.5 (low): $0.04* total, bottom segment $0.02, three thin unlabeled segments above. GPT-6 Luna (non-reasoning): $0.07 total, bottom segment $0.06, thin unlabeled segments above. GPT-6 Luna (xhigh): $0.10 total, segments from bottom $0.07, $0.02, $0.02, plus a thin unlabeled top segment. Muse Ember (xhigh): $0.12 total, segments from bottom $0.06, $0.02, $0.02, plus a thin unlabeled top segment. Muse Ember (max): $0.14 total, segments from bottom $0.07, $0.03, $0.03, $0.02. Claude Haiku 5.5 (xhigh): $0.25* total, segments from bottom $0.14, $0.04, $0.05, $0.02. Anthropic bars are terracotta, OpenAI bars are dark gray, Meta bars are blue, each with the company logo beneath."
+      },
+      {
+        "id": "ember_pareto_chart",
+        "type": "image",
+        "url": "https://static.simonwillison.net/static/2026/artificial-analysis-pareto.webp",
+        "alt": "Scatter plot from Artificial Analysis titled \"Intelligence Index vs. Cost per Task\", plotting Artificial Analysis Intelligence Index (y-axis, 5 to 40) against cost per task in USD on a log scale (x-axis, $0.04 to $0.3), with a green \"most attractive quadrant\" in the upper left and a dotted Pareto line. Claude Haiku 5.5 (low)* scores about 19 at roughly $0.044. GPT-6 Luna (non-reasoning) scores about 9.5 at roughly $0.07. GPT-6 Luna (xhigh) scores about 23.5 at roughly $0.10. Muse Ember (xhigh) scores about 34 at roughly $0.12 and Muse Ember (max) about 36 at roughly $0.14, both on the Pareto line. Claude Haiku 5.5 (xhigh)* scores about 34.5 at roughly $0.25, well to the right of the Pareto line. Three unlabeled gray dots also sit on the Pareto line."
+      },
+      {
+        "id": "ember_max_pelican",
+        "type": "image",
+        "url": "https://static.simonwillison.net/static/2026/muse-ember.webp",
+        "alt": "Bicycle frame is OK, basket has fish, pelican has a weird blue hat on."
+      }
+    ]
+  },
+  "body_md": "Meta AI 发布了 Muse Ember，和 Claude Haiku、GPT Luna 同属一档的小模型。Meta 的官方描述是：这是他们最小、最高效的模型，面向复杂推理的执行，以及 Agent 整天重复在做的那些活：工具调用、编程子任务、路由、信息抽取和长文档解析。\n\nSimon Willison 在博客里把它和两个同档对手放在一起，按价格和每任务成本分别算了一遍。\n\n## 短提示同价，长提示按门槛加价\n\n提示较短时，Muse Ember 的定价和 GPT-6 Luna、Claude Haiku 5.5 完全一样：每百万输入 token 0.10 美元，每百万输出 token 0.50 美元。同一天发布的另一款大模型 Claude Fable 5.2 定价是 8 美元和 40 美元，**是这一档的 80 倍**。\n\n提示变长后就没这么简单了。Luna、Ember 和 Haiku 都支持最多一百万输入 token，但三家都设了一个长度门槛，超过之后单价上调。把门槛算进去，Ember 的价格落在另外两家中间：\n\n| 模型 | 提示长度 | 输入（美元/百万 token） | 缓存输入 | 输出 |\n| --- | --- | --- | --- | --- |\n| GPT-6 Luna | ≤272k | $0.10 | $0.01 | $0.50 |\n| GPT-6 Luna | >272k | $0.20 | $0.02 | $0.75 |\n| Muse Ember 1.0 | ≤200k | $0.10 | $0.004 | $0.50 |\n| Muse Ember 1.0 | >200k | $0.30 | $0.012 | $1.50 |\n| Claude Haiku 5.5 | ≤100k | $0.10 | $0.01 | $0.50 |\n| Claude Haiku 5.5 | >100k | $0.50 | $0.05 | $2.50 |\n\n从表里能直接读出三点：Haiku 的门槛最低，10 万 token 就开始加价，加价后也最贵；Luna 的门槛最高，到 27.2 万 token 才加价；Ember 的缓存输入单价在三者里最低，短提示时每百万 token 只要 0.004 美元。\n\n## 每 token 单价已经不够用\n\nSimon 的看法是，现在按每 token 单价比较模型意义不大。推理 token 的存在，让不同模型解决同一个问题时消耗的 token 数量可能相差很多，单价低的模型未必总成本低。\n\nSimon Willison 给出的第一个参照，是 Artificial Analysis 的每任务成本柱状图。按原文配图的替代文字，六个配置的合计成本从低到高是：Claude Haiku 5.5（low）约 0.04 美元，GPT-6 Luna（不推理）0.07 美元，GPT-6 Luna（xhigh）0.10 美元，Muse Ember（xhigh）0.12 美元，Muse Ember（max）0.14 美元，Claude Haiku 5.5（xhigh）0.25 美元。两个 Haiku 的数字在图上带星号，原文没有解释星号含义。\n\n他认为更有用的是同一网站的“智能指数对每任务成本”散点图。按配图说明，Muse Ember（xhigh）得分约 34，成本约 0.12 美元；Muse Ember（max）得分约 36，成本约 0.14 美元，两者都落在图中的 Pareto 线上。Claude Haiku 5.5（xhigh）得分约 34.5，和 Ember（xhigh）接近，但每任务成本约 0.25 美元，位置在 Pareto 线右侧很远。GPT-6 Luna（xhigh）得分约 23.5，成本约 0.10 美元；Haiku 5.5（low）约 19 分、0.044 美元；Luna（不推理）约 9.5 分、0.07 美元。\n\nPareto 线指的是这样一条边界：线上的点想在一个维度上变好，只能在另一个维度上让步。Meta 在发布文章里也专门提到了这一点，原话的意思是：Muse Ember 位于 Artificial Analysis 完整排行榜的效率前沿上，没有哪个模型能用更低的每任务成本拿到更高的分数。这是 Meta 的自述，依据是 Artificial Analysis 的榜单数据。\n\nSimon 还顺带提到，图中绿色区域中间、同样落在 Pareto 线上的那个灰点是 GPT-6.1 Terra（low），他觉得自己该多关注一下 Terra 系列。\n\n## 六档推理画出的鹈鹕\n\nMuse Ember 有六档推理强度：minimal、low、medium、high、xhigh 和 max。Simon 让每一档各画一张“骑自行车的鹈鹕”SVG。high 档没能返回完整的 SVG；其余几张让他意外的是，推理档位高低和画面质量并没有清晰的对应关系。他贴出的是 max 档那一张，配图说明写的是：自行车车架还行，车筐里有鱼，鹈鹕戴着一顶奇怪的蓝帽子。\n\n他的评价是，Ember 画出的鹈鹕和他之前用 Muse Wonder 画的质量相当，而 Muse Wonder 的价格是 Muse Ember 的 40 倍。\n\n在这一档小模型之间做选择时，按 Simon 的思路，先看每任务成本和得分，再看单价；如果业务里的提示经常超过 10 万 token，还要把三家不同的加价门槛一起算进去。",
+  "rewrite_media": [
+    {
+      "media_id": "ember_cost_chart",
+      "placement": "after_paragraph",
+      "after_md": "Simon Willison 给出的第一个参照，是 Artificial Analysis 的每任务成本柱状图。按原文配图的替代文字，六个配置的合计成本从低到高是：Claude Haiku 5.5（low）约 0.04 美元，GPT-6 Luna（不推理）0.07 美元，GPT-6 Luna（xhigh）0.10 美元，Muse Ember（xhigh）0.12 美元，Muse Ember（max）0.14 美元，Claude Haiku 5.5（xhigh）0.25 美元。两个 Haiku 的数字在图上带星号，原文没有解释星号含义。",
+      "evidence": "source_position_verified"
+    },
+    {
+      "media_id": "ember_pareto_chart",
+      "placement": "after_paragraph",
+      "after_md": "他认为更有用的是同一网站的“智能指数对每任务成本”散点图。按配图说明，Muse Ember（xhigh）得分约 34，成本约 0.12 美元；Muse Ember（max）得分约 36，成本约 0.14 美元，两者都落在图中的 Pareto 线上。Claude Haiku 5.5（xhigh）得分约 34.5，和 Ember（xhigh）接近，但每任务成本约 0.25 美元，位置在 Pareto 线右侧很远。GPT-6 Luna（xhigh）得分约 23.5，成本约 0.10 美元；Haiku 5.5（low）约 19 分、0.044 美元；Luna（不推理）约 9.5 分、0.07 美元。",
+      "evidence": "source_position_verified"
+    },
+    {
+      "media_id": "ember_max_pelican",
+      "placement": "after_paragraph",
+      "after_md": "Muse Ember 有六档推理强度：minimal、low、medium、high、xhigh 和 max。Simon 让每一档各画一张“骑自行车的鹈鹕”SVG。high 档没能返回完整的 SVG；其余几张让他意外的是，推理档位高低和画面质量并没有清晰的对应关系。他贴出的是 max 档那一张，配图说明写的是：自行车车架还行，车筐里有鱼，鹈鹕戴着一顶奇怪的蓝帽子。",
+      "evidence": "source_position_verified"
+    }
+  ]
+}

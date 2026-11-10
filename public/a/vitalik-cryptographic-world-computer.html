@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta name="referrer" content="no-referrer">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vitalik：以太坊正在从“区块链”变成“密码学世界计算机” · 新知</title>
+<meta name="description" content="Vitalik Buterin 拿比特币白皮书逐节对照 2010 年和 2030 年的区块链，认为后 Lean 升级的以太坊还叫区块链，很大程度上是历史原因。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fffefa">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="新知">
+<meta property="og:title" content="Vitalik：以太坊正在从“区块链”变成“密码学世界计算机” · 新知">
+<meta property="og:description" content="Vitalik Buterin 拿比特币白皮书逐节对照 2010 年和 2030 年的区块链，认为后 Lean 升级的以太坊还叫区块链，很大程度上是历史原因。">
+<meta property="og:url" content="https://news.nofeetbird.tech/a/vitalik-cryptographic-world-computer">
+<link rel="canonical" href="https://news.nofeetbird.tech/a/vitalik-cryptographic-world-computer">
+<meta property="og:locale" content="zh_CN">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Vitalik：以太坊正在从“区块链”变成“密码学世界计算机” · 新知">
+<meta name="twitter:description" content="Vitalik Buterin 拿比特币白皮书逐节对照 2010 年和 2030 年的区块链，认为后 Lean 升级的以太坊还叫区块链，很大程度上是历史原因。">
+<meta property="og:image" content="https://news.nofeetbird.tech/media/vitalik-cwc-1.png">
+<meta name="twitter:image" content="https://news.nofeetbird.tech/media/vitalik-cwc-1.png">
+<meta property="article:published_time" content="2026-11-10T23:35:00+08:00">
+<script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "Organization", "@id": "https://news.nofeetbird.tech/#publisher", "name": "新知", "url": "https://news.nofeetbird.tech/", "description": "AI、Web3 与数据领域海外一手长文的中文改写选刊"}, {"@type": "WebSite", "@id": "https://news.nofeetbird.tech/#website", "name": "新知", "url": "https://news.nofeetbird.tech/", "inLanguage": "zh-CN", "publisher": {"@id": "https://news.nofeetbird.tech/#publisher"}}, {"@type": "Article", "@id": "https://news.nofeetbird.tech/a/vitalik-cryptographic-world-computer#article", "url": "https://news.nofeetbird.tech/a/vitalik-cryptographic-world-computer", "mainEntityOfPage": {"@id": "https://news.nofeetbird.tech/a/vitalik-cryptographic-world-computer#page"}, "headline": "Vitalik：以太坊正在从“区块链”变成“密码学世界计算机”", "description": "Vitalik Buterin 拿比特币白皮书逐节对照 2010 年和 2030 年的区块链，认为后 Lean 升级的以太坊还叫区块链，很大程度上是历史原因。", "inLanguage": "zh-CN", "datePublished": "2026-11-10T23:35:00+08:00", "author": {"@id": "https://news.nofeetbird.tech/#publisher"}, "publisher": {"@id": "https://news.nofeetbird.tech/#publisher"}, "isBasedOn": {"@type": "CreativeWork", "url": "https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html", "name": "The cryptographic world computer"}, "citation": "https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html", "keywords": ["Web3", "以太坊", "密码学"], "image": ["https://news.nofeetbird.tech/media/vitalik-cwc-1.png"]}, {"@type": "WebPage", "@id": "https://news.nofeetbird.tech/a/vitalik-cryptographic-world-computer#page", "url": "https://news.nofeetbird.tech/a/vitalik-cryptographic-world-computer", "name": "Vitalik：以太坊正在从“区块链”变成“密码学世界计算机” · 新知", "description": "Vitalik Buterin 拿比特币白皮书逐节对照 2010 年和 2030 年的区块链，认为后 Lean 升级的以太坊还叫区块链，很大程度上是历史原因。", "inLanguage": "zh-CN", "isPartOf": {"@id": "https://news.nofeetbird.tech/#website"}, "mainEntity": {"@id": "https://news.nofeetbird.tech/a/vitalik-cryptographic-world-computer#article"}}]}</script>
+<link rel="alternate" type="application/rss+xml" title="新知" href="/feed.xml">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-7 -7 58 58'%3E%3Crect x='-7' y='-7' width='58' height='58' rx='5' fill='%231b1d18'/%3E%3Cpath fill='%23fffefa' d='M2 0h11l29 44H31zM32 0h10L26 18l-5-7zM17 26l5 7-10 11H2z'/%3E%3C/svg%3E">
+<script>try{var t=localStorage.getItem('xz.theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
+<style data-source="/static/app.b7cfdefd4a1d.css">/* D · 影像刊 — see DESIGN.md. System fonts, real media, no left rail. */
+:root {
+  color-scheme:light;
+  --paper:#fffefa; --ink:#1b1d18; --muted:#62685a; --rule:#d8dccf;
+  --surface:#eef0e5; --sage:#dce3cc; --sage-ink:#293026; --focus:#315b3c;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC","Noto Sans CJK SC",sans-serif;
+  --ease:cubic-bezier(.2,0,0,1); --gutter:32px; --reader-bar:64px;
+  --control-border:#808675; --image-outline:#0000001a;
+  --contrast-surface:#1b1d18; --contrast-ink:#fffefa;
+}
+:root[data-theme="dark"] {
+  color-scheme:dark;
+  --paper:#20241e; --ink:#eef0e7; --muted:#b7c1af; --rule:#4b5842;
+  --surface:#30392a; --sage:#394631; --sage-ink:#eef0e7; --focus:#c0d9aa;
+  --control-border:#89957f; --image-outline:#ffffff1a;
+  --contrast-surface:#12180f; --contrast-ink:#eef0e7;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-padding-top:130px;scrollbar-gutter:stable}
+body{margin:0;background:var(--paper);color:var(--ink);font:1rem/1.7 var(--sans);-webkit-font-smoothing:antialiased;letter-spacing:0}
+[hidden]{display:none!important}
+a{color:inherit;text-decoration:none}
+@media(hover:hover){a:hover{text-decoration:underline;text-underline-offset:.2em}}
+button{font:inherit;color:inherit;cursor:pointer}
+button:disabled{cursor:wait}
+button,a{-webkit-tap-highlight-color:transparent}
+
+:focus-visible{outline:3px solid var(--focus);outline-offset:4px}
+em,i{font-style:normal;font-weight:500}
+strong,b{font-weight:600}
+img{max-width:100%;height:auto}
+.sr-only,.skip:not(:focus){position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.skip:focus{position:fixed;z-index:100;top:8px;left:8px;background:var(--ink);color:var(--paper);padding:10px 16px}
+.site-header,.site-main,.site-footer{width:min(100% - var(--gutter)*2,1320px);margin-inline:auto}
+.site-header{min-height:118px;display:flex;align-items:center;justify-content:space-between;gap:24px 32px;flex-wrap:wrap;padding-block:24px;border-bottom:1px solid var(--ink)}
+.brand{display:flex;align-items:center;gap:26px;flex:none}
+.brand:hover{text-decoration:none}
+.brand-wordmark{display:flex;align-items:baseline;gap:7px;line-height:1}
+.brand-mark{width:43px;height:43px;align-self:center;margin-top:2px}
+.brand-name{font:700 3.875rem/.95 Georgia,"Times New Roman",serif;letter-spacing:-.065em}
+.brand-period{color:var(--focus)}
+.brand-sub{font-size:0.9375rem;font-weight:500;line-height:1.5;border-inline-start:1px solid var(--rule);padding-inline-start:25px;letter-spacing:.12em}
+.brand-sub>span{display:block;font-size:0.75rem;line-height:1.6;font-weight:400;letter-spacing:.04em;color:var(--muted);margin-top:5px}
+.header-side{display:flex;align-items:center;gap:30px}
+.site-nav{display:flex;align-items:center;gap:30px;font-size:0.875rem}
+.site-nav a{min-height:44px;display:flex;align-items:center;gap:6px;position:relative}
+.site-nav a[aria-current="page"]{font-weight:600}
+.site-nav a[aria-current="page"]::after{content:"";position:absolute;inset-inline:0;bottom:3px;height:2px;background:var(--ink)}
+.icon-button{width:44px;height:44px;border:1px solid var(--control-border);border-radius:50%;display:inline-grid;place-items:center;background:transparent;flex:none}
+.site-main{min-height:55vh;padding-bottom:44px}
+.edition-line{min-height:160px;display:flex;align-items:center;justify-content:space-between;gap:24px 32px;flex-wrap:wrap;padding-block:28px}
+.edition-line h1{font-size:1.875rem;line-height:1.4;font-weight:600;margin:8px 0 10px;text-wrap:balance}
+.edition-line p{font-size:0.875rem;line-height:1.7;color:var(--muted);margin:0}
+.edition-line .edition-kicker{font-size:0.6875rem;letter-spacing:.1em;color:var(--ink)}
+.edition-kicker span{margin-inline:8px;color:var(--muted)}
+.edition-meta{text-align:end;font-variant-numeric:tabular-nums;display:flex;flex-direction:column;gap:6px;flex:none}
+.edition-label{font-size:0.75rem;color:var(--muted)}
+.edition-meta time{font:400 1.5rem/1.25 Georgia,"Times New Roman",serif;letter-spacing:.02em}
+.edition-note{font-size:0.75rem;color:var(--muted)}
+/* A quiet editorial toolbar; every control remains labelled and keyboard accessible. */
+.discovery{margin-bottom:20px}
+.discovery-top,.discovery-bottom{display:flex;align-items:center;justify-content:space-between;gap:20px}
+.discovery-top{flex-wrap:wrap;padding-block:16px;border-block:1px solid var(--rule)}
+.filter-group{display:flex;gap:8px;flex-wrap:wrap}
+.filter-group button{min-height:44px;padding:8px 16px;display:flex;align-items:center;gap:9px;font-size:0.875rem;background:transparent;border:1px solid transparent;border-radius:3px}
+.filter-group button span{font-size:0.6875rem;font-variant-numeric:tabular-nums;opacity:.8}
+.filter-group button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.search-field{display:flex;align-items:center;gap:10px;width:min(340px,42%);min-height:44px;border:1px solid var(--control-border);border-radius:3px;padding-inline:13px 0;color:var(--muted)}
+.search-field svg{flex:none}
+.search-field input{font:400 0.875rem/1.5 var(--sans);color:var(--ink);background:transparent;border:0;min-width:0;width:100%;padding:11px 0;border-radius:0}
+.search-field input::-webkit-search-cancel-button{display:none}
+.search-field input::placeholder{color:var(--muted);opacity:1}
+.search-field:focus-within{outline:2px solid var(--focus);outline-offset:3px}
+.search-field input:focus-visible{outline:none}
+.search-field button{border:0;background:transparent;width:44px;min-height:44px;flex:none;font-size:1.375rem}
+.discovery-bottom{flex-wrap:wrap;padding-top:12px;min-height:54px}
+.discovery-bottom p{margin:0;font-size:0.75rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.view-switch{display:flex;gap:4px}
+.view-switch button{display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:6px 10px;border:1px solid transparent;border-radius:3px;background:transparent;color:var(--muted);font-size:0.75rem}
+.view-switch button[aria-pressed="true"]{color:var(--ink);background:var(--surface);border-color:var(--control-border)}
+.search-empty{padding:48px 20px 72px;text-align:center;border-top:1px solid var(--rule)}
+.empty-symbol{font:400 3rem/1 Georgia,serif;color:var(--muted);margin:0 0 20px}
+.search-empty h2{font-size:1.375rem;font-weight:500;margin:0 0 12px}
+.search-empty p{color:var(--muted);overflow-wrap:anywhere}
+.search-empty .reset-button{margin:12px 0 0}
+.news-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:28px 24px;align-items:stretch}
+.news-card{grid-column:span 4;min-width:0;display:flex;flex-direction:column;border:1px solid var(--rule);background:var(--paper);position:relative;overflow:hidden}
+.news-card.is-featured{grid-column:span 8}
+.news-card.is-wide{grid-column:span 8}
+.card-link{display:flex;flex-direction:column;height:100%;min-width:0}
+.card-link:hover{text-decoration:none}
+.cover{position:relative;overflow:hidden;background:var(--surface);min-height:0;aspect-ratio:16/9;isolation:isolate}
+.cover img{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:cover;z-index:1;transition:transform 180ms var(--ease)}
+.is-featured .cover{min-height:0;aspect-ratio:2.7;flex:none}
+.is-featured .card-body{flex:0 0 auto}
+.is-wide .cover{aspect-ratio:2/1}
+.cover-fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--surface);color:var(--ink);z-index:0;overflow:hidden}
+.cover-word{font-size:clamp(2.75rem,5.3vw,5.25rem);font-weight:500;line-height:1.1;overflow-wrap:anywhere;max-width:100%;text-align:left}
+.cover-badge{position:absolute;z-index:2;left:16px;bottom:16px;background:#1b1d18dc;color:#fffefa;padding:5px 10px;font-size:0.75rem;line-height:1.6;border:1px solid #fffefa60}
+.card-body{padding:22px 24px 20px;display:flex;flex-direction:column;gap:10px;flex:1}
+.card-meta{display:flex;overflow-wrap:anywhere;align-items:flex-start;justify-content:space-between;gap:14px;font-size:0.75rem;line-height:1.7;color:var(--muted);font-variant-numeric:tabular-nums}
+.card-meta time{white-space:nowrap;flex:none}
+.card-title{font-size:1.3125rem;font-weight:600;line-height:1.6;margin:0;text-wrap:pretty;overflow-wrap:anywhere}
+.is-featured .card-title{font-size:clamp(1.5625rem,2.2vw,2rem);line-height:1.5}
+.card-dek{font-size:0.875rem;line-height:1.85;color:var(--muted);margin:0;text-wrap:pretty}
+.card-end{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;font-size:0.75rem;color:var(--muted);margin-top:auto;padding-top:16px}
+.card-read{display:inline-flex;align-items:center;gap:10px;color:var(--ink);white-space:nowrap}
+.card--text.tone-ink .card-read{color:var(--contrast-ink)}
+.card-link:focus-visible{outline-offset:-4px}
+.tone-ink .card-link:focus-visible{outline-color:var(--contrast-ink)}
+.card-arrow{font-size:1.3125rem;line-height:1}
+.card--text .type-cover{min-height:140px;padding:24px 24px 16px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:20px;overflow:hidden}
+.type-index{font-size:0.625rem;letter-spacing:.12em;line-height:1.5;font-variant-numeric:tabular-nums}
+.type-dot{color:var(--focus)}
+.tone-ink .type-dot{color:var(--contrast-ink)}
+.card--text .cover-word{font:400 clamp(2.25rem,3.5vw,3.375rem)/1.15 Georgia,"Times New Roman",serif;letter-spacing:-.03em}
+.card--text .card-body{padding-top:12px}
+.card--text{align-self:stretch}
+.card--text.tone-ink{background:var(--contrast-surface);color:var(--contrast-ink);border-color:var(--contrast-surface)}
+.card--text.tone-ink .card-meta,.card--text.tone-ink .card-dek,.card--text.tone-ink .card-end{color:var(--contrast-ink);opacity:.85}
+.card--text.tone-sage{background:var(--sage);color:var(--sage-ink);border-color:var(--sage)}
+.card--text.tone-sage .card-meta,.card--text.tone-sage .card-dek,.card--text.tone-sage .card-end{color:var(--sage-ink)}
+.cover-error-link{display:none;font-size:0.875rem;padding:0 22px 18px;text-decoration:underline;text-underline-offset:.2em}
+.media-failed .cover-error-link{display:block}
+.media-failed .cover img{display:none}
+.empty-state{padding:64px 0;max-width:40rem}
+.empty-state h1{font-size:2rem;font-weight:500}
+.empty-state p{color:var(--muted)}
+.site-footer{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:20px 0 32px;border-top:1px solid var(--ink);font-size:0.875rem;color:var(--muted)}
+.footer-links{display:flex;gap:24px;align-items:center;flex-wrap:wrap}
+.footer-links a{display:inline-flex;align-items:center;min-height:44px}
+/* Shared standalone article and progressive full-screen reader. */
+.article-reader{max-width:960px;margin:0 auto;padding:30px 0 60px;min-width:0}
+.article-back{display:inline-flex;min-height:44px;align-items:center;gap:8px;font-size:0.875rem;color:var(--muted);margin-bottom:20px}
+.article-header{max-width:900px;margin:0 auto 24px}
+.article-kicker{font-size:0.875rem;color:var(--muted);margin:0 0 12px}
+.article-header h1{font-size:clamp(1.8125rem,3.8vw,3rem);line-height:1.42;font-weight:500;margin:0 0 18px;text-wrap:pretty;overflow-wrap:anywhere}
+.article-dek{font-size:1.125rem;line-height:1.85;color:var(--muted);margin:0 0 22px;max-width:42rem}
+.article-meta{display:flex;gap:8px 22px;flex-wrap:wrap;color:var(--muted);font-size:0.875rem;padding-top:14px;border-top:1px solid var(--rule);font-variant-numeric:tabular-nums}
+.reader-tabs{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;position:sticky;top:0;z-index:3;background:var(--paper);border-block:1px solid var(--rule);padding:8px 0;margin:0 auto 30px;max-width:900px}
+.reader-tabs [data-tabs]{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.reader-tabs a{display:inline-flex;align-items:center;min-height:44px;padding:6px 14px;font-size:0.875rem;border:1px solid transparent;border-radius:3px;white-space:nowrap}
+.reader-tabs a[aria-selected="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.reader-source{margin-left:auto;font-size:0.875rem!important}
+.reader-panel{max-width:42rem;margin:0 auto 44px;scroll-margin-top:130px}
+.section-heading{font-size:1.25rem;font-weight:500;margin:0 0 20px}
+.reader-enhanced .section-heading{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);margin:0;padding:0}
+.original-title{font-size:1.1875rem;line-height:1.7;margin:0 0 22px;font-weight:500;overflow-wrap:anywhere}
+.completeness-note{font-size:0.875rem;line-height:1.85;color:var(--muted);background:var(--surface);border:1px solid var(--rule);padding:12px 16px;margin:0 0 24px}
+.prose{min-width:0;font-size:1.125rem;line-height:1.95;overflow-wrap:anywhere;text-wrap:pretty}
+.prose pre{max-width:100%;overflow-x:auto;margin:1.5em 0;padding:1rem;border:1px solid var(--rule);background:var(--surface);font-size:.875rem;line-height:1.65;tab-size:4;white-space:pre;overflow-wrap:normal;text-wrap:initial}
+.prose pre code{display:block;width:max-content;min-width:100%;padding:0;border:0;border-radius:0;background:none;font-size:inherit;line-height:inherit;white-space:pre;overflow-wrap:normal}
+/* Keep wide source tables inside the reading column without compressing every cell. */
+.prose table{display:block;width:fit-content;max-width:100%;overflow-x:auto;border-collapse:collapse;margin:1.5em 0;font-size:.9375rem;line-height:1.65;tab-size:4;text-wrap:wrap;font-variant-numeric:tabular-nums}
+.prose th,.prose td{padding:.7em .85em;border:1px solid var(--rule);text-align:left;vertical-align:top;min-width:5.5rem;max-width:24rem}
+.prose :is(th,td):first-child{min-width:7.5rem}
+.prose th{font-weight:600;background:var(--surface)}
+.prose :is(th,td)[align="left"]{text-align:left}
+.prose :is(th,td)[align="center"]{text-align:center}
+.prose :is(th,td)[align="right"]{text-align:right}
+.prose tbody tr:nth-child(even){background:color-mix(in srgb,var(--surface) 45%,transparent)}
+.prose caption{text-align:left;font-size:.875rem;line-height:1.6;color:var(--muted);padding-bottom:.65em}
+.prose img{max-width:100%;height:auto;vertical-align:middle}
+.prose p,.prose li{font-size:inherit;line-height:inherit;margin:0 0 1em}
+.prose :is(th,td) :is(p,li){font-size:inherit;line-height:inherit}
+.prose :is(th,td)>:last-child{margin-bottom:0}
+.prose h1,.prose h2,.prose h3{font-size:1.5625rem;font-weight:500;line-height:1.6;margin:1.8em 0 .7em}
+.prose h4,.prose h5,.prose h6{font-size:1.125rem;font-weight:600;line-height:1.65;margin:1.6em 0 .6em}
+.prose ul,.prose ol{padding-left:1.4em;margin:0 0 1.2em}
+.prose li{margin-bottom:.45em}
+.prose li>:is(ul,ol){margin:.45em 0 .6em}
+.prose li>p{margin-bottom:.6em}
+.prose li>:last-child{margin-bottom:0}
+.prose blockquote{margin:1.5em 0;padding:18px 22px;border:1px solid var(--rule);background:var(--surface)}
+.prose blockquote>:first-child{margin-top:0}
+.prose blockquote>:last-child{margin-bottom:0}
+.prose blockquote blockquote{margin:1em 0}
+.prose a{font-weight:500;text-decoration:underline;text-underline-offset:.22em}
+.prose hr{border:0;border-top:1px solid var(--rule);margin:2em 0}
+.prose code{font-family:ui-monospace,monospace;font-size:.9em;background:var(--surface);padding:2px 4px;border-radius:3px;white-space:break-spaces}
+.prose details{margin:1.3em 0;padding:.8em 1em;border:1px solid var(--rule)}
+.prose summary{cursor:pointer;font-weight:600;line-height:1.6}
+.prose details[open]>summary{margin-bottom:.8em}
+.prose details>:last-child{margin-bottom:0}
+.prose kbd{font-family:ui-monospace,monospace;font-size:.85em;padding:.1em .35em;border:1px solid var(--rule);border-bottom-width:2px;border-radius:3px;background:var(--surface)}
+.prose sup,.prose sub{font-size:.75em;line-height:0;position:relative;vertical-align:baseline}
+.prose sup{top:-.5em}.prose sub{bottom:-.2em}
+.original-media{display:grid;gap:24px;margin:24px 0 28px}
+.media-figure{margin:0;min-width:0}
+.media-frame{background:var(--surface);border:1px solid var(--rule);overflow:hidden}
+.media-frame img,.media-frame video{max-width:100%;height:auto;max-height:80dvh;display:block;margin:auto}
+.media-frame audio{display:block;width:100%;min-height:54px}
+.media-frame .yt{position:relative;aspect-ratio:16/9}
+.media-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#1b1d18}
+.media-figure figcaption{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px 18px;font-size:0.875rem;line-height:1.8;color:var(--muted);padding-top:8px}
+.media-figure figcaption a{text-decoration:underline;text-underline-offset:.2em}
+.media-error{font-size:0.875rem;color:var(--muted);margin:0;padding:18px}
+.source-box{max-width:42rem;margin:24px auto 0;border-top:1px solid var(--rule);padding-top:22px;font-size:0.875rem;color:var(--muted);overflow-wrap:anywhere}
+.source-box a{display:inline-flex;align-items:center;min-height:44px;text-decoration:underline;color:var(--ink);margin-right:22px}
+.reader-sheet{position:fixed;inset:0;margin:0;padding:0;width:100%;max-width:none;height:100dvh;max-height:none;border:0;background:var(--paper);color:var(--ink);overflow:hidden}
+.reader-sheet::backdrop{background:#1b1d1870}
+.reader-sheet[open]{display:flex;flex-direction:column}
+.reader-sheet.sheet-fallback{z-index:60}
+.sheet-bar{min-height:var(--reader-bar);display:flex;flex-shrink:0;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;padding:0 var(--gutter);border-bottom:1px solid var(--rule);background:var(--paper)}
+.sheet-close{min-height:44px;display:inline-flex;align-items:center;gap:12px;border:0;background:none;padding:6px 0;font-size:0.875rem}
+.sheet-close span{font-size:1.375rem}
+.sheet-brand{font-size:0.875rem;font-weight:500}
+.sheet-bar a{font-size:0.875rem;color:var(--muted);min-height:44px;display:flex;align-items:center}
+.sheet-scroll{height:calc(100dvh - var(--reader-bar));flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;scroll-padding-top:130px;padding:0 var(--gutter)}
+.sheet-scroll .article-back{display:none}
+.sheet-scroll .article-reader{padding-top:35px}
+.sheet-scroll .reader-tabs{top:0}
+.sheet-status{max-width:44rem;margin:52px auto;min-width:0}
+.sheet-status h2{font-size:1.6875rem;line-height:1.5;font-weight:500;margin:0 0 18px}
+.sheet-status p{font-size:1rem;line-height:1.9;color:var(--muted)}
+.sheet-status a{display:inline-flex;align-items:center;min-height:44px;margin-right:18px;text-decoration:underline;text-underline-offset:.2em}
+.retry-button,.reset-button{display:inline-flex;align-items:center;min-height:44px;padding:8px 18px;border:1px solid var(--ink);background:var(--ink);color:var(--paper);border-radius:3px;margin-right:18px}
+.skeleton-title{width:85%;height:38px;background:var(--surface);margin-bottom:14px}
+.skeleton-title.short{width:60%}
+.skeleton-line{height:16px;background:var(--surface);margin-top:20px}
+.skeleton-line.short{width:72%}
+body.sheet-open{overflow:hidden}
+.about-copy{max-width:42rem;margin:52px auto 72px}
+.about-copy h1{font-size:2.375rem;font-weight:500;line-height:1.4;margin:0 0 30px}
+/* Filtered results have equal weight; the opening spread remains asymmetric. */
+.news-grid.is-filtered .is-featured{grid-column:span 4}
+.news-grid.is-filtered .is-featured .cover{aspect-ratio:16/9}
+.news-grid.is-filtered .is-featured .card-title{font-size:1.3125rem}
+.news-grid[data-layout="list"]{display:flex;flex-direction:column;gap:0;border-top:1px solid var(--rule)}
+.news-grid[data-layout="list"] .news-card{background:transparent;color:var(--ink);border:0;border-bottom:1px solid var(--rule);overflow:visible}
+.news-grid[data-layout="list"] .card-link{display:flex;flex-direction:row;gap:28px;padding:26px 0;align-items:center}
+.news-grid[data-layout="list"] .cover,.news-grid[data-layout="list"] .type-cover{display:none}
+.news-grid[data-layout="list"] .card-body{padding:0;gap:8px;flex:1;min-width:0}
+.news-grid[data-layout="list"] .card-title{font-size:1.3125rem;line-height:1.6}
+.news-grid[data-layout="list"] .card-meta,.news-grid[data-layout="list"] .card-dek,.news-grid[data-layout="list"] .card-end{color:var(--muted);opacity:1}
+.news-grid[data-layout="list"] .card-read{color:var(--ink)}
+.news-grid[data-layout="list"] .card-end{padding-top:2px}
+.news-grid[data-layout="list"] .card-link:focus-visible{outline-color:var(--focus);outline-offset:5px}
+.reading-position{display:flex;align-items:center;gap:12px;flex-basis:100%;color:var(--muted);font-size:0.6875rem;line-height:1.3}
+.reading-position span{min-width:4ch;text-align:end;font-variant-numeric:tabular-nums}
+.reading-position progress{appearance:none;display:block;width:100%;height:2px;border:0;background:var(--rule);color:var(--focus)}
+.reading-position progress::-webkit-progress-bar{background:var(--rule)}
+.reading-position progress::-webkit-progress-value{background:var(--focus)}
+.reading-position progress::-moz-progress-bar{background:var(--focus)}
+.cover img,.media-frame img{outline:1px solid var(--image-outline);outline-offset:-1px}
+@media(hover:hover){
+ .news-card:has(.card-link:hover){border-color:var(--muted)}
+ .card-link:hover .card-read{text-decoration:underline;text-underline-offset:4px}
+ .icon-button:hover,.filter-group button[aria-pressed="false"]:hover,.view-switch button[aria-pressed="false"]:hover{background:var(--surface)}
+ .site-nav a:hover{text-decoration:none;color:var(--focus)}
+}
+@media(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){
+ .card-link:hover .cover img{transform:scale(1.025)}
+}
+@media(prefers-reduced-motion:no-preference){
+ .icon-button,.retry-button,.reset-button{transition:scale 150ms ease-out}
+ .icon-button:not(:disabled):active,.retry-button:not(:disabled):active,.reset-button:not(:disabled):active{scale:.96}
+}
+@media(max-width:1050px){
+ .brand-sub{display:none}
+ .news-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+ .news-card,.news-card.is-wide,.news-grid.is-filtered .is-featured{grid-column:span 1}
+ .news-card.is-featured{grid-column:span 1}
+ .is-featured .cover{aspect-ratio:16/9}
+ .is-featured .card-title{font-size:1.4375rem}
+ .edition-line h1{font-size:1.6875rem}
+}
+@media(max-width:680px){
+ :root{--gutter:20px;--reader-bar:58px}
+ .site-header{min-height:0;gap:22px;flex-wrap:wrap;padding:26px 0 15px}
+ .brand{gap:16px}
+ .brand-wordmark{gap:5px}
+ .brand-name{font-size:3.25rem}
+ .brand-mark{width:35px;height:35px}
+ .brand-sub{display:block;padding-inline-start:16px;font-size:0.8125rem}
+ .brand-sub>span{font-size:0.6875rem}
+ .header-side{width:100%;justify-content:space-between;gap:16px}
+ .site-nav{gap:28px;flex-wrap:wrap;font-size:0.8125rem}
+ .icon-button{width:40px;height:40px}
+ .edition-line{min-height:0;gap:16px;padding-block:22px}
+ .edition-line h1{font-size:1.5625rem;margin-top:10px}
+ .edition-line .edition-description{font-size:0.8125rem;max-width:24em;line-height:1.8}
+ .edition-meta{display:none}
+ .edition-line .edition-kicker{font-size:0.625rem}
+ .discovery-top{flex-wrap:wrap;gap:16px;padding-block:14px 16px}
+ .filter-group{gap:4px}
+ .filter-group button{padding-inline:13px;font-size:0.8125rem}
+ .search-field{width:100%}
+ .search-field input{font-size:1rem}
+ .discovery-bottom{gap:8px;align-items:center}
+ .discovery-bottom p{font-size:0.6875rem}
+ .view-switch button{font-size:0.6875rem;padding-inline:8px;gap:5px}
+ .view-switch svg{width:13px;height:13px}
+ .news-grid{grid-template-columns:minmax(0,1fr);gap:22px}
+ .news-card,.news-card.is-wide,.news-card.is-featured,.news-grid.is-filtered .is-featured{grid-column:auto;grid-row:auto}
+ .cover,.is-featured .cover,.is-wide .cover{aspect-ratio:16/9;min-height:0;flex:none}
+ .card-body{padding:20px;gap:12px}
+ .card-title,.is-featured .card-title,.news-grid.is-filtered .is-featured .card-title{font-size:1.375rem;line-height:1.6}
+ .card-dek{font-size:0.875rem}
+ .card-meta{font-size:0.75rem}
+ .card--text .type-cover{min-height:130px;padding:22px 20px 12px}
+ .card--text .cover-word{font-size:2.875rem}
+ .card-end{padding-top:12px}
+ .news-grid[data-layout="list"] .card-link{gap:16px;padding:22px 0;align-items:flex-start}
+ .news-grid[data-layout="list"] .cover,.news-grid[data-layout="list"] .type-cover{display:none}
+ .news-grid[data-layout="list"] .card-title{font-size:1.1875rem}
+ .site-main{padding-bottom:36px}
+ .site-footer{align-items:flex-start;flex-direction:column;gap:12px;padding-top:22px;font-size:0.75rem}
+ .footer-links{gap:26px}
+ .article-reader{padding-top:23px}
+ .article-back{margin-bottom:16px}
+ .article-header h1{font-size:1.8125rem;line-height:1.5}
+ .article-dek{font-size:1rem;line-height:1.9}
+ .reader-tabs{gap:4px;margin-bottom:24px;padding:7px 0}
+ .reader-tabs a{font-size:0.875rem;padding:6px 10px}
+ .reader-tabs .reader-source{font-size:0.8125rem!important;padding-inline-end:0}
+ .reader-panel{margin-bottom:28px}
+ .prose{font-size:1.0625rem;line-height:1.95}
+ .prose h1,.prose h2,.prose h3{font-size:1.4375rem;line-height:1.6}
+ .prose blockquote{padding:15px}
+ .sheet-bar{gap:10px}
+ .sheet-bar a{font-size:0.8125rem}
+ .sheet-brand{font-size:0.75rem}
+ .sheet-scroll .article-reader{padding-top:25px}
+ .sheet-status{margin-top:32px}
+ .about-copy{margin-top:32px}
+}
+@media(max-width:360px){
+ :root{--gutter:16px}
+ .brand-sub>span{font-size:0.6875rem;max-width:6em}
+ .site-nav{gap:22px}
+ .sheet-brand{display:none}
+ .reader-tabs a{padding-inline:8px;font-size:0.8125rem}
+}
+@media(prefers-reduced-motion:reduce){
+ *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
+}
+@media print{
+ .site-header,.site-footer,.reader-tabs,.article-back,.sheet-bar{display:none!important}
+ .reader-panel[hidden]{display:block!important}
+ .site-main,.article-reader{width:100%;max-width:none}
+ .reader-sheet[open]{position:static;height:auto;overflow:visible}
+ .sheet-scroll{height:auto;overflow:visible;padding:0}
+}
+
+/* Source media remains part of the Chinese reading flow, not just the original tab. */
+.rewrite-source-media{margin:28px 0}
+.prose .source-media-heading{font-size:1.25rem;line-height:1.6;margin:0 0 12px}
+.prose .rewrite-source-media .completeness-note{font-size:0.875rem;line-height:1.8}
+.prose .media-error{font-size:0.875rem;line-height:1.8;margin:0}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<header class="site-header">
+  <a class="brand" href="/" aria-label="新知首页"><span class="brand-wordmark" aria-hidden="true"><svg class="brand-mark" viewBox="0 0 44 44" fill="currentColor"><circle cx="22" cy="22" r="20" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="22" cy="22" r="7"/></svg><span class="brand-name">新知<span class="brand-period">.</span></span></span><span class="brand-sub">AI · Web3 · 数据<span>英文一手 · 中文改写</span></span></a>
+  <div class="header-side"><nav class="site-nav" aria-label="主导航"><a href="/">精选</a><a class="archive-nav" href="/archive">往期</a><a href="/feed.xml" aria-label="订阅全文 RSS">订阅 RSS <span aria-hidden="true">↗</span></a></nav><button type="button" class="icon-button" id="theme-btn" aria-label="切换为暗色主题" aria-pressed="false"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"/></svg></button></div>
+</header>
+<main class="site-main" id="main">
+<article class="article-reader" data-article-id="vitalik-cryptographic-world-computer">
+<a class="article-back" href="/">← 返回选刊</a>
+<header class="article-header"><p class="article-kicker">Vitalik Buterin / 文章</p><h1>Vitalik：以太坊正在从“区块链”变成“密码学世界计算机”</h1><p class="article-dek">Vitalik Buterin 拿比特币白皮书逐节对照 2010 年和 2030 年的区块链，认为后 Lean 升级的以太坊还叫区块链，很大程度上是历史原因。</p><div class="article-meta"><time datetime="2026-11-10">本站收录 2026年11月10日 · 周二</time><span>原文发布 2026年9月27日 · 周日</span><span>原作者：Vitalik Buterin</span><span>中文改写：<a href="/about">新知</a></span><span>Web3 · 以太坊 · 密码学</span></div></header>
+<nav class="reader-tabs" aria-label="文章版本与来源"><div data-tabs><a href="#rewrite" id="tab-rewrite" data-view="rewrite">中文改写</a><a href="#original" id="tab-original" data-view="original">原文</a></div><a class="reader-source" href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">原文链接 ↗</a><div class="reading-position" hidden><progress max="100" value="0" aria-label="当前版本阅读进度"></progress><span data-reading-percent aria-hidden="true">0%</span></div></nav>
+<section class="reader-panel" id="rewrite" data-reader-panel="rewrite" aria-label="中文改写"><h2 class="section-heading">中文改写</h2><div class="prose"><p>人们习惯把以太坊叫作“区块链”，好像它和中本聪 2009 年创造的比特币本质上是同一种技术。Vitalik Buterin 认为，在很多方面确实如此；即便是正在按 Strawmap 路线图建设的未来“精简以太坊”（lean Ethereum），也保留了区块链的核心特征。但这项技术在过去十五年里已经演化了很多，未来三年还会演化得更多，到那时，把以太坊正在走向的东西称为一种性质不同的系统，是说得通的。</p>
+<p>今天的以太坊有通用计算、权益证明、使用零知识证明的链上应用，以及提供扩容和隐私的 L2。明天的以太坊会有一个可调的计算旋钮，在极致规模和完全通用之间取舍；会有多种形式的多方共同出块；会有高度优化的权益证明；零知识证明会内置到基础层，并承担关键角色。</p>
+<p>这篇文章要梳理的，是 2010 年的区块链和 2030 年的区块链之间最重要的几项根本差异，既从技术角度看，也从用户能期待哪些性质的角度看。</p>
+<h2>拿比特币白皮书逐节对照</h2>
+<p>他先把比特币白皮书逐节过了一遍，在截图上用三种颜色标出以太坊在 2015 年（黄色）、2025 年（绿色）和 2030 年（蓝色）的对应情况，再在旁边写批注。</p>
+<section class="rewrite-source-media" aria-label="原文媒体"><div class="original-media">
+<figure class="media-figure" data-media-id="cwc_fig1"><div class="media-frame"><img src="/media/vitalik-cwc-1.png" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-1.png" alt="原文配图：比特币白皮书第 2 节“交易”的批注截图" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="cwc_fig2"><div class="media-frame"><img src="/media/vitalik-cwc-2.png" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-2.png" alt="原文配图：比特币白皮书第 4 节“工作量证明”的批注截图" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="cwc_fig3"><div class="media-frame"><img src="/media/vitalik-cwc-3.png" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-3.png" alt="原文配图：比特币白皮书第 5 节“网络”的批注截图" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="cwc_fig4"><div class="media-frame"><img src="/media/vitalik-cwc-4.png" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-4.png" alt="原文配图：比特币白皮书第 7 节“回收磁盘空间”的批注截图" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="cwc_fig5"><div class="media-frame"><img src="/media/vitalik-cwc-5.png" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-5.png" alt="原文配图：比特币白皮书第 10 节“隐私”的批注截图" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div></section>
+<p>五张截图里的批注要点如下（文字取自图中批注）：</p>
+<ul>
+<li><strong>第 2 节“交易”</strong>：白皮书把电子币定义为一串数字签名，每个所有者通过对上一笔交易的哈希签名来转移币。批注指出，状态和历史现在已经明确分开；签名将在链下聚合，每个区块在链上只留一个，而且很多时候会换成零知识证明。</li>
+<li><strong>第 4 节“工作量证明”</strong>：以太坊自 2022 年起改用权益证明，用验证者签名代替寻找 nonce。交易不再作为一整块数据打包，签名、证明等依赖会被拆出来，在内存池里聚合。白皮书隐含的假设是区块由一个参与者构建；现实中这一点已经被大幅削弱，比如权限有限的矿池、协议内的提议者与构建者分离，而 FOCIL 及之后可能的扩展，会把多方分权出块更深地写进协议。</li>
+<li><strong>第 5 节“网络”</strong>：白皮书缺少的部分包括内存池层面的聚合（EIP-8288 之后，只有入口节点能看到单个签名和证明）、发送者匿名（混合网络等）和分布式出块。有了 PeerDAS，每个节点只需下载每个区块的一小部分，目前覆盖 blob，以后会覆盖完整区块内容。以太坊的权益证明里，出块和分叉选择规则大体上是分开的，分叉选择主要依据证明投票而不是区块；投票是并行到来的，所以共识延迟大幅降低。</li>
+<li><strong>第 7 节“回收磁盘空间”</strong>：这一点已经做到，方式是把历史（交易）和状态明确分开。新的节省空间策略是，验证不再需要存储状态，改用 SNARK；很多情况下也不需要保存哈希，尤其是有了 SNARK 和 BAL 之后。白皮书还缺少对不同存储类型（数据库、平面文件等）及其优化取舍的明确考虑，以及分布式状态存储。</li>
+<li><strong>第 10 节“隐私”</strong>：白皮书的思路是公开所有交易，同时保持公钥匿名。批注指出，使用 ZK-SNARK 的隐私协议已经打破了“必须公开所有交易”这一前提，FOCIL 和 EIP-8288 会让这类交易更像一等公民；早在十年前就已经很清楚，有了现代数据分析工具，白皮书那种程度的隐私不够用。缺少的还有读取隐私（防止 RPC 查询暴露用户）和广播隐私（可以用混合网络等解决）；可编程隐私的最佳方案仍是开放问题。</li>
+</ul>
+<p>几乎每一节都有大的变化。为了更紧凑，他把这些变化整理成了一张表：</p>
+<section class="rewrite-source-media" aria-label="原文媒体"><div class="original-media">
+<figure class="media-figure" data-media-id="cwc_fig6"><div class="media-frame"><img src="/media/vitalik-cwc-6.svg" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-6.svg" alt="原文配图：2010 年与 2030 年区块链做法对照表" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div></section>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>问题</th>
+<th>2010 年的做法</th>
+<th>2030 年的做法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>怎么知道一笔交易得到了授权？</td>
+<td>签名</td>
+<td>有时是抗量子签名（或几个签名），有时是零知识证明</td>
+</tr>
+<tr>
+<td>怎么确定规范链？</td>
+<td>工作量证明</td>
+<td>带少数时隙终局性和可用链的权益证明</td>
+</tr>
+<tr>
+<td>怎么验证区块？</td>
+<td>完整重新下载并重新计算</td>
+<td>SNARK 验证，加上用 PeerDAS 保证数据可用性</td>
+</tr>
+<tr>
+<td>一笔交易怎样进入区块？</td>
+<td>用户 → 内存池 → 矿工 → 区块</td>
+<td>用户 → 具备强隐私性的内存池 → FOCIL 参与者或构建者 → 区块；签名和证明很早就被剥离，先由内存池节点聚合，再由构建者聚合</td>
+</tr>
+<tr>
+<td>计算是什么结构？</td>
+<td>线性，串行</td>
+<td>并行：签名和证明在内存池内并行处理；gas 规则鼓励适合并行的流程</td>
+</tr>
+<tr>
+<td>客户端节点怎么节省空间？</td>
+<td>修剪旧历史</td>
+<td>只存一小部分历史；历史和状态分布式存储；往往不需要存储树的内部节点；不同对象用不同格式存储（数据库、平面文件等）</td>
+</tr>
+<tr>
+<td>轻客户端能验证什么？</td>
+<td>共识；有效性需要信任诚实多数</td>
+<td>共识和有效性（数据可用性和计算都能验证）</td>
+</tr>
+<tr>
+<td>写入隐私</td>
+<td>假设 UTXO 图无法被有效分析</td>
+<td>ZK-SNARK</td>
+</tr>
+<tr>
+<td>账户策略隐私</td>
+<td>没有</td>
+<td>ZK-SNARK 加私有账户抽象</td>
+</tr>
+<tr>
+<td>读取隐私</td>
+<td>自己运行全节点，否则没有</td>
+<td>方案一：运行全节点（SNARK 去掉了计算要求，会更容易）；方案二：TEE+ORAM、PIR 等技术</td>
+</tr>
+<tr>
+<td>网络层隐私</td>
+<td>假设大多数内存池节点诚实、不追踪用户</td>
+<td>可以用洋葱路由、混合网络等</td>
+</tr>
+</tbody>
+</table>
+<h2>区块链的核心属性几乎都在变</h2>
+<p>在他看来，区块链的几乎每一项核心属性，要么已经根本改变，要么即将根本改变：</p>
+<ul>
+<li><strong>验证</strong>：下载并重新执行 → 用 PeerDAS 抽样，再验证一个 SNARK</li>
+<li><strong>共识</strong>：PoW → PoS → 优化得多的 PoS</li>
+<li><strong>出块权</strong>：单个矿工出块 → 多方共同构建区块</li>
+</ul>
+<p>他套用 AI 的口吻打趣说，唯一“诚实”的结论（好吧，是“诚实的笑点”）是：像完成 Lean 升级之后的以太坊这样的现代密码学网络，之所以还叫“区块链”，很大程度上是历史原因。实际上它是两股脉络合成的混合结构：</p>
+<ol>
+<li>中本聪的核心思想</li>
+<li>学术界五十年积累下来的强大密码学工具，它们在 2009 年还不存在，或者还不成熟</li>
+</ol>
+<p>原文接着用一张时间线图回答“加密货币里到底有多少密码学”，对比 2009、2020 和 2030 年。图的左侧是学术成果：哈希与签名（1970 年代末）、椭圆曲线（1985）、部分同步条件下的 DLS 共识（1988）、PCP 定理（1990）、私有信息检索（1995）、洋葱路由（1995），以及 2010 年代初第一批可用的 SNARK 和 2010 年代末第一批可用的 STARK。右侧是实际系统：BitTorrent（2001）、可复用工作量证明（2004）、比特币（2009）、以太坊（2013）、Zcash（2016）、2017 至 2018 年定型的现代区块链 PoS 设计，以及标为“未来”的终点，左侧多项成果都有箭头指向它。</p>
+<section class="rewrite-source-media" aria-label="原文媒体"><div class="original-media">
+<figure class="media-figure" data-media-id="cwc_fig7"><div class="media-frame"><img src="/media/vitalik-cwc-7.png" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-7.png" alt="原文配图：密码学学术成果与区块链系统的时间线" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div></section>
+<p>密码学并不是唯一重要的学科。形式化验证、数据库理论、点对点网络理论、信息论、经济学等等同样重要。但这些学科都和那套基本内核兼容：每个人都尝试用有效的工作量证明做出下一个区块，一个人成功并广播，其他人下载并重新执行，循环往复。密码学带来的变化与这套内核不兼容。</p>
+<h2>用户面对的取舍正在改变</h2>
+<p>最重要的结论是，用户面对的那套取舍正在发生根本变化。他用一张表对比了 2015 年和 2030 年以太坊的优点与缺点：</p>
+<section class="rewrite-source-media" aria-label="原文媒体"><div class="original-media">
+<figure class="media-figure" data-media-id="cwc_fig8"><div class="media-frame"><img src="/media/vitalik-cwc-8.svg" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-8.svg" alt="原文配图：2015 年与 2030 年以太坊的优缺点对照表" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div></section>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th></th>
+<th>2015 年的以太坊</th>
+<th>2030 年的以太坊</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>优点</td>
+<td>100% 在线</td>
+<td>100% 在线</td>
+</tr>
+<tr>
+<td>优点</td>
+<td>抗审查（即保证交易被打包）</td>
+<td>强抗审查：通过 FOCIL 保证交易实时被打包</td>
+</tr>
+<tr>
+<td>优点</td>
+<td>保证按编写的规则执行</td>
+<td>保证按编写的规则执行</td>
+</tr>
+<tr>
+<td>优点</td>
+<td>不可逆</td>
+<td>不可逆</td>
+</tr>
+<tr>
+<td>优点</td>
+<td>（无对应项）</td>
+<td>隐私往往比服务器更强</td>
+</tr>
+<tr>
+<td>缺点</td>
+<td>成本很高</td>
+<td>通用计算成本高（许多专用计算的开销低得多）</td>
+</tr>
+<tr>
+<td>缺点</td>
+<td>隐私</td>
+<td>通用计算的隐私（许多专用应用已经有很强的隐私）</td>
+</tr>
+<tr>
+<td>缺点</td>
+<td>延迟（出块约 17 秒，12 个确认约 200 秒）</td>
+<td>有一定延迟（一个时隙约 4 至 8 秒，终局约 8 至 32 秒）</td>
+</tr>
+<tr>
+<td>缺点</td>
+<td>要么运行一台高配节点，要么信任别人</td>
+<td>要获得最优保障仍需运行节点，但要求轻得多</td>
+</tr>
+</tbody>
+</table>
+<p>构建应用时，<strong>计算的结构</strong>开始变得很重要。在简单的区块链里，1 字节就是 1 字节，1 gas 就是 1 gas。在未来的架构里，同样多的计算，如果全塞进一笔难以拆解、串行执行的交易，成本会高得多；如果拆成封装良好、可以并行处理或剪枝的依赖，最好在交易进入最终区块之前就处理掉，成本会低得多。这会改变开发者的激励，也会逐渐改变所有以太坊应用的结构。他的推测是：<strong>长期来看，编程模式也许会收敛到这样一种形态：只有直接描述不可交换的状态变化和顺序的信息上链，其余一切在进入区块之前就被聚合掉</strong>。</p>
+<section class="rewrite-source-media" aria-label="原文媒体"><div class="original-media">
+<figure class="media-figure" data-media-id="cwc_fig9"><div class="media-frame"><img src="/media/vitalik-cwc-9.svg" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-9.svg" alt="原文配图：结构化计算示意图" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div></section>
+<p>示意图的图注是：对计算做结构化，能让区块链更有效地专注于它的本职工作。</p>
+<h2>去中心化开始带来性能</h2>
+<p>也许最重要的转变是，<strong>网络的去中心化，正从单纯为安全和稳健付出的代价，变成至少在少数有限场景下、连性能角度都算优势的东西</strong>。去中心化网络能并行存储更大量的数据，能并行完成大量计算，很多时候就在内存池里完成。少数情况下它还能<em>提升</em>隐私，因为只有去中心化网络才能有效隐藏元数据，比如数据和请求来自哪里。</p>
+<p>回到 2010 年代中期，这曾是以太坊早期的一个梦想：去中心化不只是为了稳健，也是为了<em>扩大</em>规模。中心化系统能把工作分给不同参与者来提升性能，以太坊也应该能。当时做不到，主要原因只有一个：缺少<em>验证</em>。把工作拆开，就得验证每一份工作都做对了。早期设计尝试用随机抽样的委员会来补这个洞，但都卡在同一个瓶颈上：委员会搭建复杂、成本高，还会大幅增加延迟；而且委员会一旦失灵，没有任何补救手段。如今有了现代密码学，这个问题已经解决，这套方案的额外开销还在逐月下降。</p>
+<p>去中心化有望改善性能的另一个方向是延迟。以太坊本身的延迟永远比不上服务器，但围绕它搭建的基础设施有可能做到。</p>
+<p>总体来看，在用户和链之间建一层更强的去中心化中间层，而这一层本身不是链，可以让以太坊变得非常强大，同时不损害链的任何基本属性。</p>
+<h2>更远处的混淆技术</h2>
+<p>再往后，以太坊可能还会经历一次转变：混淆技术（iO）的兴起，这是他此前三篇文章讨论过的方向。这里的终极目标是，可用的混淆技术能消除隐私和通用性之间的取舍：在完全安全、加密的形式下进行完全通用的计算，参与方数量不受限制，而且可以异步参与。即使是较弱版本的混淆，也有很多用途，比如加密内存池。不过他强调，这篇文章的所有结论，在这些技术可用之前很久就已经成立。</p>
+<h2>什么是“密码学世界计算机”</h2>
+<p>这就是他所说的“密码学世界计算机”：以太坊从一个只能把计算和数据不加区分地丢上去执行的账本，转向一种把区块链与密码学隐私、密码学验证以及强大的去中心化链下组件结合起来的架构。</p>
+<p>要完整建成这套设计，挑战还很多。让零知识证明足够高效、足够安全很难，但这属于<em>封装起来的复杂性</em>，而且已经在借助 AI 工具大力优化。更难、系统复杂度也更高的部分，可能是管理并并行化对海量状态的访问。这方面已经有不少思路，但还需要打磨，尤其要随着对未来应用的了解加深而调整。</p>
+<p>按 Strawmap，明年计划中的分叉 Hegota 很可能是以太坊最后一次“常规”分叉：它的功能、技术和开发流程，2015 年的人都还认得出来。之后的一切都涉及递归 STARK、自动化形式化验证、高度优化的共识算法，以及让这一切抗量子。以太坊从 PeerDAS 开始，就已经从单纯的区块链转向更强大的东西；Hegota 之后，这场转型会成为以太坊的<em>主线故事</em>。最终结果是：比上一代技术单靠自身所能做到的，便宜得多、可扩展得多、也私密得多的高安全性计算。这就是密码学世界计算机。</p>
+<p>文中对以太坊应用开发者最直接可用的一条是：把签名、证明这类可以并行处理或提前聚合的部分拆出来，只把描述顺序和不可交换状态变化的信息留在链上，按他的判断，这样的结构在未来的架构里成本会低得多。</p>
+</div></section>
+<section class="reader-panel" id="original" data-reader-panel="original" aria-label="原文">
+<h2 class="section-heading">原文</h2><p class="completeness-note">原文的九张配图以内嵌 data URI 形式发布，没有独立图片地址；本站逐字节转存到 /media/ 并在上方媒体区展示，正文中以 [Figure N] 标出原位置。原文 Markdown 取自作者博客仓库 vbuterin/blog 的 posts/the_cryptographic_world_computer.md。</p><h3 class="original-title">The cryptographic world computer</h3>
+<div class="original-media">
+<figure class="media-figure" data-media-id="cwc_fig1"><div class="media-frame"><img src="/media/vitalik-cwc-1.png" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-1.png" alt="原文配图：比特币白皮书第 2 节“交易”的批注截图" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="cwc_fig2"><div class="media-frame"><img src="/media/vitalik-cwc-2.png" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-2.png" alt="原文配图：比特币白皮书第 4 节“工作量证明”的批注截图" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="cwc_fig3"><div class="media-frame"><img src="/media/vitalik-cwc-3.png" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-3.png" alt="原文配图：比特币白皮书第 5 节“网络”的批注截图" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="cwc_fig4"><div class="media-frame"><img src="/media/vitalik-cwc-4.png" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-4.png" alt="原文配图：比特币白皮书第 7 节“回收磁盘空间”的批注截图" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="cwc_fig5"><div class="media-frame"><img src="/media/vitalik-cwc-5.png" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-5.png" alt="原文配图：比特币白皮书第 10 节“隐私”的批注截图" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="cwc_fig6"><div class="media-frame"><img src="/media/vitalik-cwc-6.svg" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-6.svg" alt="原文配图：2010 年与 2030 年区块链做法对照表" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="cwc_fig7"><div class="media-frame"><img src="/media/vitalik-cwc-7.png" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-7.png" alt="原文配图：密码学学术成果与区块链系统的时间线" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="cwc_fig8"><div class="media-frame"><img src="/media/vitalik-cwc-8.svg" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-8.svg" alt="原文配图：2015 年与 2030 年以太坊的优缺点对照表" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="cwc_fig9"><div class="media-frame"><img src="/media/vitalik-cwc-9.svg" data-original-src="https://news.nofeetbird.tech/media/vitalik-cwc-9.svg" alt="原文配图：结构化计算示意图" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div>
+<div class="prose" lang="en"><p>We talk about Ethereum as “a blockchain”, as though it is fundamentally the same technology as the Bitcoin that Satoshi Nakomoto created back in 2009. In many ways it is, and in some ways even the “lean Ethereum” of the future that is <a href="https://leanroadmap.org/" rel="noopener noreferrer">being built</a> along the lines of the <a href="https://strawmap.org/" rel="noopener noreferrer">Strawmap</a> retains the core trappings of a blockchain. But at the same time, the technology has evolved greatly over the last fifteen years, and is poised to evolve even more over the next three - to the point where it becomes fair to call the thing that Ethereum is moving towards a qualitatively different kind of system.</p>
+<p>The Ethereum of today has general-purpose computation, proof of stake, onchain applications using zero-knowledge proofs and L2s that provide scaling and privacy. The Ethereum of tomorrow will have computation with a tunable dial between extreme scale and full generality, multiple forms of multi-participant block construction, a highly optimized form of proof of stake, and zero-knowledge proofs baked in playing key roles at the base layer.</p>
+<p>This post will walk through some of the most important fundamental differences between blockchains in 2010 and blockchains in 2030, both from the point of view of the technology and from the point of view of what properties you can expect to have as a user.</p>
+<p>To start off, let’s go through the original Bitcoin whitepaper, section by section, and see how this compares to Ethereum - in 2015 (yellow), 2025 (green) and 2030 (blue).</p>
+<p>[Figure 1: inline image in the original post, shown in the media section above]</p>
+<p>[Figure 2: inline image in the original post, shown in the media section above]</p>
+<p>[Figure 3: inline image in the original post, shown in the media section above]</p>
+<p>[Figure 4: inline image in the original post, shown in the media section above]</p>
+<p>[Figure 5: inline image in the original post, shown in the media section above]</p>
+<p>There are large changes to basically every section. To make things more compact, let’s make it a table:</p>
+<p>[Figure 6: inline image in the original post, shown in the media section above]</p>
+<p>Pretty much every core property of what it means to be a blockchain either has fundamentally changed or soon will fundamentally change:</p>
+<ul>
+<li><strong>Verification</strong>: download and re-execute → PeerDAS sample and verify a SNARK</li>
+<li><strong>Consensus</strong>: PoW → PoS → much better optimized PoS</li>
+<li><strong>Block construction authority</strong>: single miner makes block → multi-party block construction</li>
+</ul>
+<p>As an AI might say, the only <em>honest</em> conclusion (ok fine, the <em>honest punchline</em>) is that a modern cryptographic network like the post-Lean-upgrade Ethereum is called a “blockchain” to a large extent for historical reasons. In reality it’s a hybrid construction that merges together two strands:</p>
+<ol>
+<li>Core Satoshian ideas</li>
+<li>New powerful cryptographic machinery that emerged out of 50 years of academia and did not even exist (or was not mature) in 2009</li>
+</ol>
+<p>[Figure 7: inline image in the original post, shown in the media section above]</p>
+<p><em>How much crypto is in crypto? 2009 vs 2020 vs 2030</em></p>
+<p>Cryptography is not the only science that matters. Also important are: <a href="https://vitalik.eth.limo/general/2026/05/18/fv.html" rel="noopener noreferrer">formal verification</a>, database theory, peer-to-peer networking theory, information theory, economics and much more. But all of those things are compatible with the fundamental core of “everyone tries to make the next block with valid PoW, one guy succeeds, broadcasts it, everyone else downloads it and re-executes, repeat”. The cryptographic changes are not.</p>
+<p>Now, what does this mean for users?</p>
+<p>The most important conclusion is that the set of tradeoffs for users is radically changing:</p>
+<p>[Figure 8: inline image in the original post, shown in the media section above]</p>
+<p>When building applications, <strong>structure of computation</strong> is starting to matter a lot. In a simple blockchain, 1 byte = 1 byte and 1 gas = 1 gas. In the architectures of the future, the same amount of computation will cost you much more if you shove it all into one inscrutable serially-executed transaction, and much less if you put it into well-encapsulated dependencies that can be parallelized or pruned, ideally before the transaction even enters the final block. This affects the incentives of developers, and will over time affect the structure of all applications using Ethereum: <strong>perhaps in the long run, we will converge toward programming patterns where information directly related to describing non-commutative state changes and ordering is posted onchain, and everything else is aggregated before it even gets included into a block</strong>.</p>
+<p>[Figure 9: inline image in the original post, shown in the media section above]</p>
+<p><em>Structuring computation lets the blockchain more effectively focus on its job.</em></p>
+<p>Perhaps the most important shift is that <strong>the decentralized nature of the network is shifting from being purely a burden incurred in the name of safety and robustness to at least sometimes, in a few limited cases, being a strength even from a performance perspective</strong>. The decentralized network allows larger volumes of data to be stored in parallel. It allows a high volume of computation to happen in parallel, in many cases inside the mempool. In a few cases, it <em>increases</em> privacy, because only decentralized networks can effectively hide metadata (eg. <em>where data and requests are coming from</em>).</p>
+<p>Back in the mid-2010s, this was an early dream of Ethereum: that we could decentralize not just for robustness but also to <em>increase</em> scale. If centralized systems can split up work between different participants to increase their performance, so should we. Back then, this was not viable for one primary reason: the missing ingredient was <em>verification</em>. If you split up work, you have to verify that each unit of work was done correctly. Early designs attempted to patch this with randomly sampled committees, but they all ran into the same bottleneck: first, committees are complicated to set up and expensive and greatly increase latency, second, there is no recourse if the committee fails. Now, with modern cryptography, this problem is solved, and the overhead factor of that solution is decreasing month by month.</p>
+<p>Another area to watch for where decentralization can potentially improve performance properties is latency. Ethereum itself will never have latency that competes with servers, but infrastructure built around it could.</p>
+<p>In general, creating a stronger decentralized layer in the middle between users and a chain, that is not itself a chain, could make Ethereum very powerful without compromising any of the chain’s fundamental properties.</p>
+<p>Later in the future, there is the possibility that Ethereum will go through one further shift - <a href="https://vitalik.eth.limo/general/2026/06/29/obfuscation1.html" rel="noopener noreferrer">the</a> possible <a href="https://vitalik.eth.limo/general/2026/07/28/obfuscation_part_ii_diamond_io.html" rel="noopener noreferrer">rise</a> of <a href="https://vitalik.eth.limo/general/2026/08/21/obfuscation_part_iii_local_mixing.html" rel="noopener noreferrer">obfuscation</a> (iO). The holy grail here is that viable obfuscation can eliminate the tradeoff between privacy and generalization: you can have fully generalized computation involving an unbounded number of (asynchronous) participants in a fully secure and encrypted form. Even weak versions of obfuscation have many applications in eg. encrypted mempools. But all of the conclusions in this post will apply long before any of that becomes available.</p>
+<p>This is the "cryptographic world computer”: a shift from Ethereum as solely a ledger onto which you can indiscriminately dump computation and data that gets executed, to an architecture that combines blockchains with cryptographic privacy and verification, and powerful decentralized off-chain components.</p>
+<p>There are still many challenges in fully building out this design. Making zero knowledge proofs efficient enough and safe enough is difficult, but it is <a href="https://vitalik.eth.limo/general/2022/02/28/complexity.html" rel="noopener noreferrer">encapsulated complexity</a> and is already being heavily optimized with AI tools. The more difficult, and systemically complex, piece will likely be managing and parallelizing access to very large amounts of state. There are already many ideas on the horizon for how to handle this, though they need to be refined especially as we learn more about what applications will be running in the future.</p>
+<p>If you look at <a href="https://strawmap.org/" rel="noopener noreferrer">the Strawmap</a>, Hegota - the fork planned for next year - is likely to be Ethereum’s last “normal” fork, with features and technology and development process that would be recognizable to someone in 2015. Everything after that involves recursive STARKs, automated formal verification, highly optimized consensus algorithms, and making it all quantum-safe. With PeerDAS, Ethereum began its transition from being just a blockchain to being something much more powerful. Starting after Hegota, this transformation becomes Ethereum’s <em>primary story</em>. The final outcome of this: much more cheap, scalable and private high-security computation than anything that could be done with the previous era’s technology alone. The cryptographic world computer.</p></div>
+</section>
+<footer class="source-box"><span>内容来自原作者；中文为新知编辑改写，非逐字翻译。</span><div><a href="https://vitalik.eth.limo/general/2026/09/27/the_cryptographic_world_computer.html" target="_blank" rel="noopener noreferrer">打开原文 ↗</a><a href="https://strawmap.org/" target="_blank" rel="noopener noreferrer">相关链接 ↗</a></div></footer>
+</article>
+</main>
+<footer class="site-footer"><span>新知 · AI、Web3 与数据领域的海外一手长文中文改写<br>每日更新 · 中国标准时间（UTC+8） · 基于 <a href="https://github.com/joeseesun/xnews" target="_blank" rel="noopener noreferrer">xnews</a>（MIT）</span><nav class="footer-links" aria-label="页尾导航"><a href="/feed.xml">全文 RSS ↗</a><a href="/archive">全部文章</a><a href="/about">关于</a></nav></footer>
+
+<script data-source="/static/app.522792b3284b.js">/* D · progressive visual-journal reader. No framework, no content rewriting. */
+(() => {
+  'use strict';
+  const $ = (selector, root = document) => root.querySelector(selector);
+  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  const readerMemory = new Map();
+  const mediaBound = new WeakSet();
+  const nextFrame = callback => requestAnimationFrame(callback);
+  const safeFocus = element => { if (element?.isConnected) element.focus({preventScroll: true}); };
+  function currentTheme() { return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'; }
+  function paintTheme() {
+    const dark = currentTheme() === 'dark';
+    const button = $('#theme-btn');
+    if (button) {
+      button.setAttribute('aria-pressed', String(dark));
+      button.setAttribute('aria-label', dark ? '切换为亮色主题' : '切换为暗色主题');
+    }
+    $('meta[name="theme-color"]')?.setAttribute('content', dark ? '#20241e' : '#fffefa');
+  }
+  paintTheme();
+  $('#theme-btn')?.addEventListener('click', () => {
+    const style = document.createElement('style');
+    style.textContent = '*,*::before,*::after{transition:none!important}';
+    document.head.append(style);
+    const next = currentTheme() === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('xz.theme', next); } catch {}
+    paintTheme();
+    void document.documentElement.offsetHeight;
+    nextFrame(() => nextFrame(() => style.remove()));
+  });
+
+  // Filter the existing static cards; content and native links work without JS.
+  const discovery = $('[data-discovery]');
+  if (discovery) {
+    const grid = $('[data-news-grid]');
+    const cards = $$('.news-card', grid);
+    const search = $('#story-search');
+    const clear = $('[data-clear-search]');
+    const empty = $('[data-search-empty]');
+    const normalize = value => value.normalize('NFKC').toLocaleLowerCase().trim();
+    const index = cards.map(card => normalize(card.dataset.search || ''));
+    let kind = 'all', layout = discovery.dataset.defaultView;
+    function render(writeURL = true) {
+      const terms = normalize(search.value).split(/\s+/).filter(Boolean);
+      let count = 0;
+      cards.forEach((card, i) => {
+        card.hidden = !(kind === 'all' || card.dataset.kind === kind) || !terms.every(term => index[i].includes(term));
+        if (!card.hidden) count++;
+      });
+      grid.dataset.layout = layout;
+      grid.classList.toggle('is-filtered', kind !== 'all' || terms.length > 0);
+      $$('[data-filter]', discovery).forEach(button => button.setAttribute('aria-pressed', String(button.dataset.filter === kind)));
+      $$('[data-layout]', discovery).forEach(button => button.setAttribute('aria-pressed', String(button.dataset.layout === layout)));
+      $('[data-result-count]').textContent = count === cards.length ? `${count} 篇文章 · 最新在前` : `找到 ${count} 篇 · 共 ${cards.length} 篇`;
+      clear.hidden = !search.value;
+      empty.hidden = count !== 0;
+      $('[data-empty-description]').textContent = search.value.trim() ? `试试更短的关键词，或清除「${search.value.trim()}」与类型筛选。` : '这个类型暂时没有文章，试试查看全部内容。';
+      if (writeURL) {
+        const url = new URL(location.href);
+        for (const [key, value] of [['q', search.value.trim()], ['type', kind === 'all' ? '' : kind], ['view', layout === discovery.dataset.defaultView ? '' : layout]]) {
+          if (value) url.searchParams.set(key, value); else url.searchParams.delete(key);
+        }
+        history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+      }
+    }
+    function restore() {
+      if (location.pathname.startsWith('/a/')) return;
+      const params = new URLSearchParams(location.search);
+      search.value = params.get('q') || '';
+      kind = ['text', 'video'].includes(params.get('type')) ? params.get('type') : 'all';
+      layout = ['journal', 'list'].includes(params.get('view')) ? params.get('view') : discovery.dataset.defaultView;
+      render(false);
+    }
+    search.addEventListener('input', () => render());
+    clear.addEventListener('click', () => { search.value = ''; render(); search.focus(); });
+    $$('[data-filter]', discovery).forEach(button => button.addEventListener('click', () => { kind = button.dataset.filter; render(); }));
+    $$('[data-layout]', discovery).forEach(button => button.addEventListener('click', () => { layout = button.dataset.layout; render(); }));
+    $('[data-reset-filters]').addEventListener('click', () => { kind = 'all'; search.value = ''; render(); search.focus(); });
+    window.addEventListener('popstate', restore);
+    discovery.hidden = false;
+    restore();
+  }
+  function suspendMedia(root) {
+    $$('video,audio', root).forEach(media => { try { media.pause(); } catch {} });
+    $$('iframe[src]', root).forEach(frame => {
+      frame.dataset.pausedSrc = frame.getAttribute('src');
+      frame.removeAttribute('src');
+    });
+  }
+  function resumeEmbeds(root) {
+    $$('iframe[data-paused-src]', root).forEach(frame => {
+      frame.setAttribute('src', frame.dataset.pausedSrc);
+      delete frame.dataset.pausedSrc;
+    });
+  }
+  function bindMedia(root) {
+    $$('img,video,audio', root).forEach(media => {
+      if (mediaBound.has(media)) return;
+      mediaBound.add(media);
+      const figure = media.closest('.media-figure');
+      const notice = figure && $('.media-error', figure);
+      let bufferingTimer = null, requestedPlayback = false;
+      function clearBuffering() {
+        clearTimeout(bufferingTimer); bufferingTimer = null;
+        if (notice?.dataset.mediaState === 'buffering') notice.hidden = true;
+      }
+      const failed = () => {
+        requestedPlayback = false; clearBuffering();
+        const cover = media.closest('[data-cover]');
+        if (cover) cover.closest('.news-card')?.classList.add('media-failed');
+        if (figure) {
+          if (notice) {
+            notice.textContent = /^(VIDEO|AUDIO)$/.test(media.tagName)
+              ? '此处暂时无法播放，请通过下方原文链接观看或收听。'
+              : '图片未能载入，请通过下方原文链接查看。';
+            notice.dataset.mediaState = 'failed'; notice.hidden = false;
+          }
+          media.hidden = true;
+          if (media.tagName === 'VIDEO') {
+            const poster = $('[data-video-fallback]', figure);
+            if (poster) poster.hidden = false;
+          }
+        }
+      };
+      media.addEventListener('error', failed);
+      if (/^(VIDEO|AUDIO)$/.test(media.tagName)) {
+        const armBuffering = () => {
+          if (!requestedPlayback || bufferingTimer || media.hidden) return;
+          bufferingTimer = setTimeout(() => {
+            bufferingTimer = null;
+            if (notice && figure.isConnected && requestedPlayback && !media.hidden && !media.closest('[hidden]')) {
+              notice.textContent = '外部媒体暂未能继续播放，可通过下方原文链接观看或收听。';
+              notice.dataset.mediaState = 'buffering'; notice.hidden = false;
+            }
+          }, 10000);
+        };
+        media.addEventListener('play', () => { requestedPlayback = true; armBuffering(); });
+        media.addEventListener('waiting', armBuffering);
+        media.addEventListener('stalled', armBuffering);
+        media.addEventListener('playing', clearBuffering);
+        ['pause', 'ended', 'emptied'].forEach(name => media.addEventListener(name, () => {
+          requestedPlayback = false; clearBuffering();
+        }));
+      }
+      if (media.tagName === 'IMG' && media.complete && media.naturalWidth === 0) failed();
+    });
+  }
+  bindMedia(document);
+
+  // Accessible manual-activation tabs; no JS leaves both complete sections and links intact.
+  function enhanceReader(article, scroller, onView) {
+    const tablist = $('[data-tabs]', article);
+    if (!tablist) return null;
+    const tabs = $$('[data-view]', tablist);
+    const panels = $$('[data-reader-panel]', article);
+    const id = article.dataset.articleId;
+    const memory = readerMemory.get(id) || {positions: {}, view: 'rewrite'};
+    readerMemory.set(id, memory);
+    const isWindow = scroller === window;
+    const getTop = () => isWindow ? window.scrollY : scroller.scrollTop;
+    const setTop = value => { if (isWindow) window.scrollTo(0, value); else scroller.scrollTop = value; };
+    const toolbar = tablist.closest('.reader-tabs');
+    const position = $('.reading-position', toolbar);
+    const progress = $('progress', toolbar);
+    const percent = $('[data-reading-percent]', toolbar);
+    let progressFrame = null;
+    function updateProgress() {
+      progressFrame = null;
+      if (!article.isConnected || !progress) return;
+      const panel = panels.find(item => !item.hidden);
+      if (!panel) return;
+      const viewport = isWindow ? window.innerHeight : scroller.clientHeight;
+      const origin = isWindow ? 0 : scroller.getBoundingClientRect().top;
+      const top = panel.getBoundingClientRect().top - origin;
+      const distance = panel.getBoundingClientRect().height - viewport + toolbar.offsetHeight;
+      const value = distance <= 0 ? (top < viewport ? 100 : 0) : Math.round(Math.max(0, Math.min(1, (toolbar.offsetHeight - top) / distance)) * 100);
+      progress.value = value;
+      percent.textContent = value + '%';
+    }
+    function scheduleProgress() { if (progressFrame == null) progressFrame = nextFrame(updateProgress); }
+    if (position) position.hidden = false;
+    scroller.addEventListener('scroll', scheduleProgress, {passive: true});
+    window.addEventListener('resize', scheduleProgress);
+    article.addEventListener('load', scheduleProgress, true);
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(scheduleProgress) : null;
+    panels.forEach(panel => observer?.observe(panel));
+    const toolbarTop = () => Math.max(0, toolbar.getBoundingClientRect().top + getTop() - (isWindow ? 0 : scroller.getBoundingClientRect().top));
+    let view = null, generation = 0;
+    article.classList.add('reader-enhanced');
+    tablist.setAttribute('role', 'tablist');
+    tabs.forEach(tab => {
+      tab.setAttribute('role', 'tab');
+      tab.setAttribute('aria-controls', tab.dataset.view);
+    });
+    panels.forEach(panel => {
+      panel.setAttribute('role', 'tabpanel');
+      panel.setAttribute('tabindex', '0');
+      panel.setAttribute('aria-labelledby', 'tab-' + panel.dataset.readerPanel);
+    });
+    function remember() { if (view) memory.positions[view] = getTop(); memory.view = view; }
+    function show(next, {initial = false, updateURL = true} = {}) {
+      if (!['rewrite', 'original'].includes(next) || view === next) return;
+      const thisGeneration = ++generation;
+      if (view) {
+        remember();
+        const old = panels.find(panel => panel.dataset.readerPanel === view);
+        if (old) suspendMedia(old);
+      }
+      view = next;
+      memory.view = next;
+      panels.forEach(panel => {
+        panel.hidden = panel.dataset.readerPanel !== next;
+        if (!panel.hidden) resumeEmbeds(panel);
+        else suspendMedia(panel);
+      });
+      tabs.forEach(tab => {
+        const selected = tab.dataset.view === next;
+        tab.setAttribute('aria-selected', String(selected));
+        tab.setAttribute('tabindex', selected ? '0' : '-1');
+      });
+      if (updateURL) onView(next);
+      const saved = memory.positions[next];
+      // First rewrite starts at its title; first original starts at the visible tab bar.
+      if (!initial || next === 'original' || saved != null) {
+        nextFrame(() => {
+          if (thisGeneration === generation && article.isConnected) setTop(saved ?? toolbarTop());
+        });
+      }
+      scheduleProgress();
+    }
+    tabs.forEach(tab => tab.addEventListener('click', event => {
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      event.preventDefault();
+      show(tab.dataset.view);
+    }));
+    tablist.addEventListener('keydown', event => {
+      const index = tabs.indexOf(document.activeElement);
+      if (index < 0) return;
+      if (event.key === ' ') { event.preventDefault(); show(tabs[index].dataset.view); return; }
+      let target = null;
+      if (event.key === 'ArrowRight') target = tabs[(index + 1) % tabs.length];
+      if (event.key === 'ArrowLeft') target = tabs[(index - 1 + tabs.length) % tabs.length];
+      if (event.key === 'Home') target = tabs[0];
+      if (event.key === 'End') target = tabs.at(-1);
+      if (target) { event.preventDefault(); safeFocus(target); }
+    });
+    show(location.hash === '#original' ? 'original' : 'rewrite', {initial: true, updateURL: false});
+    bindMedia(article);
+    return {show, remember, dispose() {
+      scroller.removeEventListener('scroll', scheduleProgress);
+      window.removeEventListener('resize', scheduleProgress);
+      article.removeEventListener('load', scheduleProgress, true);
+      observer?.disconnect();
+      if (progressFrame != null) cancelAnimationFrame(progressFrame);
+    }};
+  }
+  function replaceViewURL(view) {
+    const url = new URL(location.href);
+    url.hash = view === 'original' ? 'original' : 'rewrite';
+    history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+  }
+  const directArticle = $('.site-main > [data-article-id]');
+  if (directArticle) {
+    const direct = enhanceReader(directArticle, window, replaceViewURL);
+    window.addEventListener('hashchange', () => direct?.show(location.hash === '#original' ? 'original' : 'rewrite', {updateURL: false}));
+    window.addEventListener('pagehide', () => { direct?.remember(); suspendMedia(directArticle); });
+  }
+
+  const sheet = $('#reader-sheet');
+  const grid = $('[data-news-grid]');
+  if (!sheet || !grid) return;
+  const scroll = $('.sheet-scroll', sheet);
+  const closeButton = $('[data-close-sheet]', sheet);
+  const pageRoots = $$('.site-header,.site-main,.site-footer');
+  const listTitle = document.title;
+  const listCanonical = $('link[rel="canonical"]')?.href;
+  const cache = new Map();
+  let active = null, controller = null, viewController = null, sequence = 0;
+  const canAnimate = !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  history.scrollRestoration = 'manual';
+  const sheetState = () => history.state?.xzSheet;
+  const safePath = path => /^\/a\/[a-z0-9-]+\/?$/.test(path);
+  const prefetching = new Map();
+  const readerURLs = new Map($$('[data-open-reader]', grid).map(a => [new URL(a.href, location.href).pathname, a.dataset.readerSrc]));
+  const requestURL = path => readerURLs.get(path) || path;
+  // Warm only a link the reader shows intent to open; never preload media or all stories.
+  function prefetchArticle(event) {
+    if (event.type === 'pointerover' && event.pointerType === 'touch') return;
+    const connection = navigator.connection;
+    if (connection?.saveData || /(^|-)2g$/.test(connection?.effectiveType || '')) return;
+    const anchor = event.target.closest?.('[data-open-reader]');
+    if (!anchor) return;
+    const url = new URL(anchor.href, location.href), path = url.pathname;
+    if (url.origin !== location.origin || !safePath(path) || cache.has(path) || prefetching.has(path) || prefetching.size >= 2) return;
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 8000);
+    const promise = fetch(requestURL(path), {signal: abort.signal, priority: 'low', headers: {'Accept': 'text/html'}})
+      .then(response => { if (!response.ok) throw new Error('Prefetch failed'); return response.text(); })
+      .then(html => {
+        const raw = new DOMParser().parseFromString(html, 'text/html').querySelector('[data-article-id]');
+        if (!raw || '/a/' + raw.dataset.articleId !== path.replace(/\/$/, '')) return null;
+        cache.set(path, html);
+        if (cache.size > 12) cache.delete(cache.keys().next().value);
+        return html;
+      }).catch(() => null).finally(() => { clearTimeout(timer); if (prefetching.get(path)?.promise === promise) prefetching.delete(path); });
+    prefetching.set(path, {promise, abort});
+  }
+  grid.addEventListener('pointerover', prefetchArticle);
+  grid.addEventListener('focusin', prefetchArticle);
+  grid.addEventListener('pointerdown', prefetchArticle);
+  async function readyPrefetch(path) {
+    const pending = prefetching.get(path);
+    if (!pending) return null;
+    let timer;
+    try {
+      // A click is foreground work. Do not inherit an eight-second speculative
+      // request deadline when that request is queued or stalled on a slow link.
+      const ready = await Promise.race([pending.promise, new Promise(resolve => { timer = setTimeout(() => resolve(null), 120); })]);
+      if (!ready) pending.abort.abort();
+      return ready;
+    } finally { clearTimeout(timer); }
+  }
+  function togglePageInert(value) { pageRoots.forEach(element => { element.inert = value; }); }
+  function showSheet(keyboard) {
+    if (sheet.open) return;
+    document.body.classList.add('sheet-open');
+    togglePageInert(true);
+    if (typeof sheet.showModal === 'function') sheet.showModal();
+    else { sheet.setAttribute('open', ''); sheet.classList.add('sheet-fallback'); sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-modal', 'true'); }
+    if (!keyboard && canAnimate && typeof sheet.animate === 'function') {
+      sheet.animate([{transform: 'translateY(16px)', opacity: .8}, {transform: 'translateY(0)', opacity: 1}], {duration: 180, easing: 'cubic-bezier(.23,1,.32,1)'});
+    }
+    safeFocus(closeButton);
+  }
+  function loading() {
+    scroll.setAttribute('aria-busy', 'true');
+    scroll.innerHTML = '<div class="sheet-status" role="status"><p>正在打开文章…</p><div aria-hidden="true"><div class="skeleton-title"></div><div class="skeleton-title short"></div><div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div></div>';
+    scroll.scrollTop = 0;
+  }
+  function errorState(path, sourceURL) {
+    scroll.removeAttribute('aria-busy');
+    scroll.replaceChildren();
+    const status = document.createElement('section'); status.className = 'sheet-status'; status.setAttribute('role', 'alert');
+    const title = document.createElement('h2'); title.textContent = '文章暂时未能打开';
+    const description = document.createElement('p'); description.textContent = '选刊和阅读位置都还在。可以重试，或打开独立文章页。';
+    const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'retry-button'; retry.textContent = '重试'; retry.addEventListener('click', () => loadArticle(path, sourceURL));
+    const link = document.createElement('a'); link.href = path; link.textContent = '独立文章页 ↗';
+    status.append(title, description, retry, link);
+    if (sourceURL) { const source = document.createElement('a'); source.href = sourceURL; source.target = '_blank'; source.rel = 'noopener noreferrer'; source.textContent = '去原文 ↗'; status.append(source); }
+    scroll.append(status);
+  }
+  async function loadArticle(path, sourceURL = '') {
+    if (!safePath(path)) return;
+    const ownSequence = ++sequence;
+    controller?.abort();
+    viewController?.remember(); viewController?.dispose(); viewController = null;
+    suspendMedia(scroll);
+    loading();
+    controller = new AbortController();
+    const signal = controller.signal;
+    const timeout = setTimeout(() => controller?.signal === signal && controller.abort(), 12000);
+    try {
+      let html = cache.get(path) || await readyPrefetch(path);
+      if (ownSequence !== sequence || !active) return;
+      if (signal.aborted) throw new Error('Article load timed out');
+      if (!html) {
+        const response = await fetch(requestURL(path), {signal, priority: 'high', headers: {'Accept': 'text/html'}});
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        html = await response.text();
+      }
+      if (ownSequence !== sequence || !active) return;
+      const parsed = new DOMParser().parseFromString(html, 'text/html');
+      const raw = $('[data-article-id]', parsed);
+      if (!raw || '/a/' + raw.dataset.articleId !== path.replace(/\/$/, '')) throw new Error('Article mismatch');
+      cache.set(path, html);
+      if (cache.size > 12) cache.delete(cache.keys().next().value);
+      const article = document.importNode(raw, true);
+      // Set panel visibility before attaching media to the live document.
+      viewController = enhanceReader(article, scroll, view => {
+        replaceViewURL(view);
+        $('[data-sheet-permalink]', sheet).href = location.pathname + location.search + location.hash;
+      });
+      scroll.replaceChildren(article);
+      scroll.removeAttribute('aria-busy');
+      document.title = parsed.title;
+      $('link[rel="canonical"]')?.setAttribute('href', location.origin + path);
+      $('[data-sheet-permalink]', sheet).href = path + location.hash;
+      nextFrame(() => { if (ownSequence === sequence) bindMedia(article); });
+    } catch (error) {
+      if (ownSequence !== sequence || !active) return;
+      errorState(path, sourceURL);
+    } finally { clearTimeout(timeout); }
+  }
+  function openFromCard(anchor, keyboard) {
+    const url = new URL(anchor.href, location.href);
+    if (url.origin !== location.origin || !safePath(url.pathname)) return false;
+    const state = {path: url.pathname, listURL: location.pathname + location.search + location.hash, listY: window.scrollY, focusId: anchor.id, sourceURL: anchor.dataset.sourceUrl || ''};
+    history.replaceState({...history.state, xzList: {url: state.listURL, y: state.listY, focusId: state.focusId}}, '', location.href);
+    history.pushState({xzSheet: state}, '', url.pathname);
+    active = state;
+    $('[data-sheet-permalink]', sheet).href = url.pathname;
+    showSheet(keyboard);
+    loadArticle(state.path, state.sourceURL);
+    return true;
+  }
+  function finishClose() {
+    const previous = active;
+    ++sequence;
+    controller?.abort(); controller = null;
+    viewController?.remember(); viewController?.dispose(); viewController = null;
+    suspendMedia(scroll);
+    if (typeof sheet.close === 'function' && sheet.open) sheet.close();
+    sheet.removeAttribute('open'); sheet.classList.remove('sheet-fallback');
+    togglePageInert(false);
+    document.body.classList.remove('sheet-open');
+    scroll.replaceChildren(); scroll.removeAttribute('aria-busy');
+    active = null;
+    document.title = listTitle;
+    if (listCanonical) $('link[rel="canonical"]')?.setAttribute('href', listCanonical);
+    nextFrame(() => {
+      if (active) return;
+      window.scrollTo(0, previous?.listY ?? history.state?.xzList?.y ?? 0);
+      safeFocus(document.getElementById(previous?.focusId || history.state?.xzList?.focusId || '') || $('.edition-line h1'));
+    });
+  }
+  function requestClose() {
+    if (!active) return;
+    if (sheetState()) history.back(); else finishClose();
+  }
+  grid.addEventListener('click', event => {
+    const anchor = event.target.closest('[data-open-reader]');
+    if (!anchor || event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+    if (openFromCard(anchor, event.detail === 0)) event.preventDefault();
+  });
+  closeButton.addEventListener('click', requestClose);
+  sheet.addEventListener('cancel', event => { event.preventDefault(); requestClose(); });
+  sheet.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { event.preventDefault(); requestClose(); return; }
+    if (event.key !== 'Tab') return;
+    const focusables = $$('a[href],button:not(:disabled),[tabindex="0"],video[controls],audio[controls]', sheet).filter(element => !element.closest('[hidden]'));
+    const first = focusables[0], last = focusables.at(-1);
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === sheet)) { event.preventDefault(); safeFocus(last); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); safeFocus(first); }
+  });
+  window.addEventListener('popstate', () => {
+    const state = sheetState();
+    if (state && safePath(state.path)) {
+      active = state;
+      showSheet(true);
+      loadArticle(state.path, state.sourceURL);
+    } else if (active) finishClose();
+  });
+  window.addEventListener('pagehide', () => { viewController?.remember(); suspendMedia(scroll); controller?.abort(); });
+})();
+</script>
+</body>
+</html>
