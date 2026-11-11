@@ -10,6 +10,7 @@ const articles = JSON.parse(fs.readFileSync(path.join(root, 'public/articles.jso
 const articleCount = articles.length;
 // Corpus-independent ids: newest three articles by site ingest order.
 const [ID_A, ID_B, ID_C] = articles.map(a => a.id);
+const EMBER_ID = (articles.find(a => /Ember/.test(a.title + ' ' + a.dek)) || {}).id;
 const SITE = 'https://news.nofeetbird.tech';
 const homeHTML = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
 const VIDEO_ID = (homeHTML.match(/id="story-([a-z0-9-]+)" data-kind="video"/) || [])[1];
@@ -244,7 +245,7 @@ test('user-requested stalled media gets honest recovery and clears on playback/p
   video.dispatchEvent(new s.w.Event('error')); assert.equal(video.hidden, true);
   assert.equal(figure.querySelector('[data-video-fallback]').hidden, false);
   assert.equal(notice.dataset.mediaState, 'failed'); assert.match(notice.textContent, /暂时无法播放/);
-  assert.ok(figure.querySelector('figcaption a').href.startsWith('https://x.com/'));
+  assert.equal(figure.querySelector('figcaption a').href, articles.find(a => a.id === NATIVE_VIDEO_ID).source_url);
 });
 
 test('discovery combines case-insensitive search and type, with a recoverable empty state', t => {
@@ -270,7 +271,7 @@ test('query and layout deep links survive a reader round trip and Forward', asyn
   assert.equal(s.$('#story-search').value, 'Ember');
   assert.equal(s.$('[data-news-grid]').dataset.layout, 'list');
   const card = s.$('.news-card:not([hidden]) [data-open-reader]');
-  assert.ok(card.href.endsWith('/a/' + ID_C));
+  assert.ok(card.href.endsWith('/a/' + EMBER_ID));
   s.click(card); await until(() => s.$('#reader-sheet [data-article-id]'), 'article');
   s.click(s.$('[data-close-sheet]')); await until(() => !s.$('#reader-sheet').open, 'close');
   await frames();
@@ -279,7 +280,7 @@ test('query and layout deep links survive a reader round trip and Forward', asyn
   assert.equal(s.d.querySelectorAll('.news-card:not([hidden])').length, 1);
   assert.equal(s.d.activeElement, card);
   s.w.history.forward(); await until(() => s.$('#reader-sheet [data-article-id]'), 'forward');
-  assert.equal(s.$('#reader-sheet [data-article-id]').dataset.articleId, ID_C);
+  assert.equal(s.$('#reader-sheet [data-article-id]').dataset.articleId, EMBER_ID);
 });
 
 test('archive defaults to a readable list; invalid URL controls fall back safely', t => {

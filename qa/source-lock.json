@@ -10,6 +10,9 @@
   "sha256_by_id": {
     "simonw-census-btos-super-intelligence": "a7f936f814352621e9e88318c9777abef50ddf249bcde96d3dd1784fc9088344",
     "simonw-muse-ember-pricing": "32b1902c9801ff84ae640a199cd31043931c0261386d95d31cefd2957362a28b",
-    "vitalik-cryptographic-world-computer": "bfd7e8171d6f4e7ffa6d44ff4749a57b6c4b8e535e4a9bee3a392efaf0cdb04d"
+    "vitalik-cryptographic-world-computer": "bfd7e8171d6f4e7ffa6d44ff4749a57b6c4b8e535e4a9bee3a392efaf0cdb04d",
+    "duckdb-ducks-in-a-column": "58cd4f9d2bbe53cf1d63e8eb73689b686854312cad74968b5c9ad10baca47e3a",
+    "leanvm-pq-aggregation-folding-negative-results": "54f2c529e6cba38bc383add28b8c1279fe93f204ab4d37b31298ef62e04ab5d2",
+    "mollick-fable-52-jagged-agi": "789ce030ef5987e873f12ba7680c7fd7fc94d896fc2fddf82bccb7af4c930e12"
   }
 }

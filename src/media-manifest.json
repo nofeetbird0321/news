@@ -1,1 +1,40 @@
-{"assets": []}
+{
+  "assets": [
+    {
+      "source_url": "https://substack-video.s3.amazonaws.com/video_upload/post/220479835/45f2e421-5b32-4ba6-bfbd-65546f2b4e19/transcoded-01622.png",
+      "local_url": "/media/mollick-video-launch-poster.webp",
+      "content_type": "image/webp",
+      "bytes": 112392,
+      "sha256": "9c01fd537eff3586304020a9cbb0ff14678479b0a596b39415762ea9dff3664f",
+      "source_sha256": "d6754f5bfbd4bf10829ea8ec84bdc1545fb4375866f5d427e3ef8a41617416d3",
+      "transformation": "Resize to maximum 1920 pixels and encode WebP quality 88"
+    },
+    {
+      "source_url": "https://substack-video.s3.amazonaws.com/video_upload/post/220479835/e1e1a18c-81c9-40a7-886e-1c4ef4f019c1/transcoded-00001.png",
+      "local_url": "/media/mollick-video-codex-micro-poster.webp",
+      "content_type": "image/webp",
+      "bytes": 39202,
+      "sha256": "63de6abdca30ebb986315ea3a78b9d8afb928bcd78fe12281ebee8cfae331e19",
+      "source_sha256": "82bb9a669bc2a956751a9d4ed17e4909d48d102fd685ca22db1d570e8e545d26",
+      "transformation": "Resize to maximum 1920 pixels and encode WebP quality 88"
+    },
+    {
+      "source_url": "https://substack-video.s3.amazonaws.com/video_upload/post/220479835/5c852c4a-9369-4e93-ae72-8ba792269845/transcoded-03577.png",
+      "local_url": "/media/mollick-video-auden-poster.webp",
+      "content_type": "image/webp",
+      "bytes": 115472,
+      "sha256": "fabbaa37f494afb669d8256ba2a181ce5f92707086bde6ea3c4c586e98f5a2b3",
+      "source_sha256": "0c08088f282d3c089461cde13340b1b7fc333224374dab6cb5bdbb9020b45257",
+      "transformation": "Resize to maximum 1920 pixels and encode WebP quality 88"
+    },
+    {
+      "source_url": "https://substack-video.s3.amazonaws.com/video_upload/post/220479835/cc820684-16b3-4bef-a91c-4550fca387a1/transcoded-00001.png",
+      "local_url": "/media/mollick-video-portals-poster.webp",
+      "content_type": "image/webp",
+      "bytes": 226220,
+      "sha256": "ec9415c02cbd7e2a6a29deaba531240f1a67007f646544c61b3aa96fa8a4670e",
+      "source_sha256": "8849660d5de9f78eeca4816b375037816ed92327386e49a746b9e06fe533b935",
+      "transformation": "Resize to maximum 1920 pixels and encode WebP quality 88"
+    }
+  ]
+}

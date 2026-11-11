@@ -1,0 +1,946 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>DuckDB 官方导览：列式存储下的一组 SQL 写法，从直接查文件到写好 Parquet · 新知</title><meta name="robots" content="noindex"></head><body><article class="article-reader" data-article-id="duckdb-ducks-in-a-column">
+<a class="article-back" href="/">← 返回选刊</a>
+<header class="article-header"><p class="article-kicker">The DuckDB team / 文章</p><h1>DuckDB 官方导览：列式存储下的一组 SQL 写法，从直接查文件到写好 Parquet</h1><p class="article-dek">DuckDB 团队用一个 400 只鸭子的样例数据集，演示 EXCLUDE、COLUMNS()、GROUP BY ALL、QUALIFY、ASOF JOIN、分区写入和 EXPLAIN ANALYZE 等功能，共同点是只读查询需要的列和值。</p><div class="article-meta"><time datetime="2026-11-11">本站收录 2026年11月11日 · 周三</time><span>原文发布 2026年11月10日 · 周二</span><span>原作者：The DuckDB team</span><span>中文改写：<a href="/about">新知</a></span><span>数据 · DuckDB · SQL · Parquet</span></div></header>
+<nav class="reader-tabs" aria-label="文章版本与来源"><div data-tabs><a href="#rewrite" id="tab-rewrite" data-view="rewrite">中文改写</a><a href="#original" id="tab-original" data-view="original">原文</a></div><a class="reader-source" href="https://duckdb.org/2026/11/10/ducks-in-a-column.html" target="_blank" rel="noopener noreferrer">原文链接 ↗</a><div class="reading-position" hidden><progress max="100" value="0" aria-label="当前版本阅读进度"></progress><span data-reading-percent aria-hidden="true">0%</span></div></nav>
+<section class="reader-panel" id="rewrite" data-reader-panel="rewrite" aria-label="中文改写"><h2 class="section-heading">中文改写</h2><div class="prose"><p>DuckDB 团队在官方博客上发了一篇功能导览，主线只有一条：DuckDB 按列存储数据，所以一个查询只读取它点名的那些列。文章围绕这一设计，依次介绍了直接查询文件、列级 SQL、聚合快捷写法、窗口函数、ASOF 连接，以及如何写出组织良好的 Parquet 文件。</p>
+<h2>为什么按列存</h2>
+<p>DuckDB 把每一列单独存放，而不是把每一行存成一条记录。一张 50 列的表，查询只用到其中 3 列，就只读这 3 列。</p>
+<p>DuckDB 的许多性能特性都来自这个设计。列式存储<a href="https://duckdb.org/2022/10/28/lightweight-compression.html" rel="noopener noreferrer">压缩效果好</a>，因为一列里的值类型相同，而且经常重复。执行引擎以每批 2048 个值的向量来处理每一列。查询要的列越少，要做的工作就越少。</p>
+<p>文中示例用的是一个 400 只鸭子的样本数据集：每只鸭子腿上套着带编号的脚环，在 2025 年 10 月到 2026 年 4 月之间出现在四个池塘之一。<code>sightings</code> 表有五列：<code>ring_id</code>、<code>pond</code>、<code>species</code>、<code>weight_g</code> 和 <code>seen_at</code>。</p>
+<pre><code>SELECT * FROM sightings LIMIT 3;
+</code></pre>
+<pre><code>┌─────────┬───────┬─────────┬──────────┬─────────────────────┐
+│ ring_id │ pond  │ species │ weight_g │       seen_at       │
+├─────────┼───────┼─────────┼──────────┼─────────────────────┤
+│ R0001   │ south │ wigeon  │ 862      │ 2025-11-06 12:18:38 │
+│ R0002   │ south │ wigeon  │ 578      │ 2025-12-04 00:12:54 │
+│ R0003   │ south │ wigeon  │ 734      │ 2026-01-06 16:50:41 │
+└─────────┴───────┴─────────┴──────────┴─────────────────────┘
+</code></pre>
+<p>所有示例都可以在 DuckDB 命令行里运行，也可以在 Python 中用 <code>duckdb.sql(...)</code> 运行。</p>
+<pre><code>pip install duckdb                        # Python
+curl https://install.duckdb.org | bash    # CLI
+</code></pre>
+<h2>不导入，直接查询文件</h2>
+<p>查询之前不需要先导入数据。DuckDB 把文件路径当作一张表，并从文件中推断列名和类型。</p>
+<pre><code>SELECT * FROM 'ponds.csv';
+</code></pre>
+<pre><code>┌─────────┬───────┬─────────┐
+│ pond_id │ pond  │ area_m2 │
+├─────────┼───────┼─────────┤
+│ 0007    │ north │ 4200    │
+│ 0042    │ south │ 1800    │
+│ 0113    │ mill  │ 950     │
+│ 0256    │ reed  │ 3100    │
+└─────────┴───────┴─────────┘
+</code></pre>
+<p>用通配符可以查询一整个文件夹的 Parquet 文件。加上 <code>filename = true</code>，DuckDB 会把文件名作为一列加进结果：</p>
+<pre><code>SELECT filename, count(*) AS sightings
+FROM read_parquet('sightings/*.parquet', filename = true)
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌────────────────────────┬───────────┐
+│        filename        │ sightings │
+├────────────────────────┼───────────┤
+│ sightings/2025.parquet │ 184       │
+│ sightings/2026.parquet │ 216       │
+└────────────────────────┴───────────┘
+</code></pre>
+<p>DuckDB 也能通过 <a href="https://duckdb.org/docs/2.0/core_extensions/httpfs/https.html" rel="noopener noreferrer">HTTPS</a> 或 <a href="https://duckdb.org/docs/2.0/core_extensions/httpfs/s3api.html" rel="noopener noreferrer">S3</a> 读取远程文件。使用这类路径时，<a href="https://duckdb.org/docs/2.0/core_extensions/httpfs/overview.html" rel="noopener noreferrer">httpfs 扩展</a>会自动加载：</p>
+<pre><code>SELECT * FROM 's3://wetlands/2026/*.parquet';
+</code></pre>
+<p><a href="https://duckdb.org/docs/2.0/data/parquet/overview.html" rel="noopener noreferrer">Parquet 文件格式</a>同样按列存储数据，DuckDB 只读取查询点名的列。Parquet 还为每个行组（row group）保存最小值和最大值统计，所以当统计值表明某个行组不可能满足过滤条件时，DuckDB 可以直接跳过它（即 <a href="https://duckdb.org/docs/2.0/guides/performance/indexing.html#zonemaps" rel="noopener noreferrer">zonemap</a>）。</p>
+<pre><code>SELECT species, count(*) AS sightings
+FROM 'sightings/*.parquet'
+WHERE seen_at &gt;= DATE '2026-01-01'
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌─────────┬───────────┐
+│ species │ sightings │
+├─────────┼───────────┤
+│ mallard │ 89        │
+│ pintail │ 29        │
+│ teal    │ 37        │
+│ tufted  │ 29        │
+│ wigeon  │ 32        │
+└─────────┴───────────┘
+</code></pre>
+<p><strong>小贴士：检查类型嗅探器的判断。</strong> 如果 CSV 加载后类型出乎意料，可以先问 DuckDB 它猜的是什么，再把需要的类型固定下来。</p>
+<pre><code>DESCRIBE SELECT * FROM 'ponds.csv';
+</code></pre>
+<pre><code>┌─────────────┬─────────────┬──────┬──────┬─────────┬───────┐
+│ column_name │ column_type │ null │ key  │ default │ extra │
+├─────────────┼─────────────┼──────┼──────┼─────────┼───────┤
+│ pond_id     │ VARCHAR     │ YES  │ NULL │ NULL    │ NULL  │
+│ pond        │ VARCHAR     │ YES  │ NULL │ NULL    │ NULL  │
+│ area_m2     │ BIGINT      │ YES  │ NULL │ NULL    │ NULL  │
+└─────────────┴─────────────┴──────┴──────┴─────────┴───────┘
+</code></pre>
+<p>嗅探器把 <code>pond_id</code> 保留为文本，所以前导零得以保留。要覆盖它的判断，可以显式传入类型：</p>
+<pre><code>SELECT * FROM read_csv('ponds.csv', types = {'area_m2': 'DOUBLE'});
+</code></pre>
+<p><strong>小贴士：Hive 分区会变成列。</strong> 像 <code>year=2026/pond=north/</code> 这样的路径会变成 <code>year</code> 和 <code>pond</code> 两列，对这两列的过滤可以整文件夹跳过。后面“把列写好”一节会生成这种目录结构。</p>
+<pre><code>SELECT count(*)
+FROM read_parquet('lake/*/*/*.parquet', hive_partitioning = true)
+WHERE year = 2026 AND pond = 'north';
+</code></pre>
+<pre><code>┌──────────────┐
+│ count_star() │
+├──────────────┤
+│ 58           │
+└──────────────┘
+</code></pre>
+<h2>列级 SQL：批量选择、排除和改写列</h2>
+<p>DuckDB 的<a href="https://duckdb.org/docs/2.0/sql/dialect/friendly_sql.html" rel="noopener noreferrer">友好 SQL</a> 允许批量选择、排除和转换列。表很宽时，这能少打很多字，查询也更易读。</p>
+<p><strong>用 <code>EXCLUDE</code> 去掉某些列，用 <code>REPLACE</code> 原地改写某些列。</strong></p>
+<pre><code>SELECT * EXCLUDE (ring_id) FROM sightings LIMIT 3;
+</code></pre>
+<pre><code>┌───────┬─────────┬──────────┬─────────────────────┐
+│ pond  │ species │ weight_g │       seen_at       │
+├───────┼─────────┼──────────┼─────────────────────┤
+│ south │ wigeon  │ 862      │ 2025-11-06 12:18:38 │
+│ south │ wigeon  │ 578      │ 2025-12-04 00:12:54 │
+│ south │ wigeon  │ 734      │ 2026-01-06 16:50:41 │
+└───────┴─────────┴──────────┴─────────────────────┘
+</code></pre>
+<pre><code>SELECT * REPLACE (upper(species) AS species) FROM sightings LIMIT 3;
+</code></pre>
+<pre><code>┌─────────┬───────┬─────────┬──────────┬─────────────────────┐
+│ ring_id │ pond  │ species │ weight_g │       seen_at       │
+├─────────┼───────┼─────────┼──────────┼─────────────────────┤
+│ R0001   │ south │ WIGEON  │ 862      │ 2025-11-06 12:18:38 │
+│ R0002   │ south │ WIGEON  │ 578      │ 2025-12-04 00:12:54 │
+│ R0003   │ south │ WIGEON  │ 734      │ 2026-01-06 16:50:41 │
+└─────────┴───────┴─────────┴──────────┴─────────────────────┘
+</code></pre>
+<p><strong>用 <code>COLUMNS()</code> 按模式选列。</strong> 它接受正则表达式、列名列表或 lambda，并把同一个表达式应用到每个匹配的列上。<code>pond_readings</code> 表有三列温度，下面的查询返回每一列的最高读数：</p>
+<pre><code>SELECT max(COLUMNS('^temp_')) FROM pond_readings;
+</code></pre>
+<pre><code>┌────────────────┬─────────────┬────────────────┐
+│ temp_morning_c │ temp_noon_c │ temp_evening_c │
+├────────────────┼─────────────┼────────────────┤
+│ 8.0            │ 13.7        │ 8.3            │
+└────────────────┴─────────────┴────────────────┘
+</code></pre>
+<p>同样的写法也能处理缺失值。下面的查询把所有以 <code>_count</code> 结尾的列中的 <code>NULL</code> 替换为 <code>0</code>：</p>
+<pre><code>SELECT coalesce(COLUMNS(lambda c: c LIKE '%_count'), 0)
+FROM counts;
+</code></pre>
+<pre><code>┌───────────────┬────────────┬──────────────┐
+│ mallard_count │ teal_count │ wigeon_count │
+├───────────────┼────────────┼──────────────┤
+│ 12            │ 0          │ 3            │
+│ 0             │ 4          │ 1            │
+│ 7             │ 2          │ 0            │
+│ 0             │ 0          │ 5            │
+└───────────────┴────────────┴──────────────┘
+</code></pre>
+<p>选择匹配列时还可以顺便重命名。在替换名中，<code>\1</code> 表示第一个捕获组：</p>
+<pre><code>SELECT COLUMNS('temp_(.*)_c') AS '\1_celsius'
+FROM pond_readings
+LIMIT 3;
+</code></pre>
+<pre><code>┌─────────────────┬──────────────┬─────────────────┐
+│ morning_celsius │ noon_celsius │ evening_celsius │
+├─────────────────┼──────────────┼─────────────────┤
+│ 6.3             │ 9.1          │ 8.0             │
+│ 6.9             │ 10.7         │ 6.6             │
+│ 7.8             │ 8.8          │ 7.9             │
+└─────────────────┴──────────────┴─────────────────┘
+</code></pre>
+<p><strong>以 <code>FROM</code> 开头。</strong> 可以先写表名、省略 <code>SELECT</code>。单独一句 <code>FROM sightings;</code> 等同于 <code>SELECT * FROM sightings;</code>。</p>
+<pre><code>FROM sightings SELECT species, pond LIMIT 3;
+</code></pre>
+<pre><code>┌─────────┬───────┐
+│ species │ pond  │
+├─────────┼───────┤
+│ wigeon  │ south │
+│ wigeon  │ south │
+│ wigeon  │ south │
+└─────────┴───────┘
+</code></pre>
+<p><strong>把多列打包成 <code>STRUCT</code>。</strong> struct 是一个带命名字段的单列。用 <code>.*</code> 解包，可以把它的字段重新变回顶层列：</p>
+<pre><code>SELECT sighting.* FROM (
+    SELECT {'species': species, 'pond': pond} AS sighting FROM sightings
+)
+LIMIT 3;
+</code></pre>
+<pre><code>┌─────────┬───────┐
+│ species │ pond  │
+├─────────┼───────┤
+│ wigeon  │ south │
+│ wigeon  │ south │
+│ wigeon  │ south │
+└─────────┴───────┘
+</code></pre>
+<p><strong>小贴士：让 DuckDB 给列做画像。</strong> <code>SUMMARIZE</code> 为每一列返回一行，包括类型、最小值、最大值、近似去重计数、空值百分比和四分位数。</p>
+<pre><code>SUMMARIZE sightings;
+SUMMARIZE SELECT * FROM 'sightings/*.parquet';
+</code></pre>
+<h2>聚合的快捷写法</h2>
+<p>聚合天然受益于列式存储，因为对一列求和只需要扫描这一列的值。DuckDB 还加了一些语法，让 SQL 和要做的事一样简短。</p>
+<p><strong><a href="https://duckdb.org/docs/2.0/sql/query_syntax/groupby.html#group-by-all" rel="noopener noreferrer"><code>GROUP BY ALL</code></a> 按 <code>SELECT</code> 子句里所有非聚合列分组，不必把列名再写一遍。</strong></p>
+<pre><code>SELECT pond, species, count(*) AS sightings, round(avg(weight_g)) AS avg_weight_g
+FROM sightings
+GROUP BY ALL
+ORDER BY ALL
+LIMIT 5;
+</code></pre>
+<pre><code>┌──────┬─────────┬───────────┬──────────────┐
+│ pond │ species │ sightings │ avg_weight_g │
+├──────┼─────────┼───────────┼──────────────┤
+│ mill │ mallard │ 46        │ 1110.0       │
+│ mill │ pintail │ 11        │ 910.0        │
+│ mill │ teal    │ 15        │ 352.0        │
+│ mill │ tufted  │ 10        │ 879.0        │
+│ mill │ wigeon  │ 14        │ 720.0        │
+└──────┴─────────┴───────────┴──────────────┘
+</code></pre>
+<p><strong><code>FILTER</code> 可以一次扫描就统计多个类别，</strong> 不用每个类别各跑一个查询：</p>
+<pre><code>SELECT
+    pond,
+    count(*) FILTER (WHERE species = 'mallard') AS mallards,
+    count(*) FILTER (WHERE species = 'teal')    AS teals,
+    count(*) FILTER (WHERE weight_g &gt; 1200)     AS heavyweights
+FROM sightings
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌───────┬──────────┬───────┬──────────────┐
+│ pond  │ mallards │ teals │ heavyweights │
+├───────┼──────────┼───────┼──────────────┤
+│ mill  │ 46       │ 15    │ 16           │
+│ north │ 48       │ 17    │ 12           │
+│ reed  │ 26       │ 14    │ 6            │
+│ south │ 48       │ 19    │ 16           │
+└───────┴──────────┴───────┴──────────────┘
+</code></pre>
+<p><strong><code>arg_max</code> 返回另一列取最大值的那一行中的某个值，</strong> 不需要自连接。下面找出每个池塘里最重那只鸟的种类：</p>
+<pre><code>SELECT pond,
+       arg_max(species, weight_g) AS heaviest_species,
+       max(weight_g) AS max_weight_g
+FROM sightings
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌───────┬──────────────────┬──────────────┐
+│ pond  │ heaviest_species │ max_weight_g │
+├───────┼──────────────────┼──────────────┤
+│ mill  │ mallard          │ 1358         │
+│ north │ mallard          │ 1359         │
+│ reed  │ mallard          │ 1312         │
+│ south │ mallard          │ 1357         │
+└───────┴──────────────────┴──────────────┘
+</code></pre>
+<p><strong><code>PIVOT</code> 和 <code>UNPIVOT</code> 在行和列之间来回转换。</strong> <code>PIVOT</code> 为每个不同的值生成一列，这里是每个物种一列：</p>
+<pre><code>PIVOT sightings ON species USING count(*) GROUP BY pond ORDER BY pond;
+</code></pre>
+<pre><code>┌───────┬─────────┬─────────┬──────┬────────┬────────┐
+│ pond  │ mallard │ pintail │ teal │ tufted │ wigeon │
+├───────┼─────────┼─────────┼──────┼────────┼────────┤
+│ mill  │ 46      │ 11      │ 15   │ 10     │ 14     │
+│ north │ 48      │ 19      │ 17   │ 16     │ 17     │
+│ reed  │ 26      │ 11      │ 14   │ 13     │ 16     │
+│ south │ 48      │ 11      │ 19   │ 14     │ 15     │
+└───────┴─────────┴─────────┴──────┴────────┴────────┘
+</code></pre>
+<p><code>UNPIVOT</code> 方向相反。<code>monthly_counts</code> 表每个月一列，下面的查询把这些列转回行：</p>
+<pre><code>SELECT * FROM (
+    UNPIVOT monthly_counts
+    ON COLUMNS(* EXCLUDE pond)
+    INTO NAME month VALUE sightings
+)
+WHERE pond = 'north';
+</code></pre>
+<pre><code>┌───────┬───────┬───────────┐
+│ pond  │ month │ sightings │
+├───────┼───────┼───────────┤
+│ north │ Apr   │ 6         │
+│ north │ Dec   │ 18        │
+│ north │ Feb   │ 14        │
+│ north │ Jan   │ 21        │
+│ north │ Mar   │ 17        │
+│ north │ Nov   │ 20        │
+│ north │ Oct   │ 21        │
+└───────┴───────┴───────────┘
+</code></pre>
+<p><strong>小贴士：精确计算代价高时，用近似值。</strong> 在数十亿行上，<code>approx_count_distinct</code> 和 <code>approx_quantile</code> 只需要精确版本的一小部分内存。在这张小表上，估计出的 404 个不同脚环，与精确值 400 很接近。</p>
+<pre><code>SELECT approx_count_distinct(ring_id), approx_quantile(weight_g, 0.9)
+FROM sightings;
+</code></pre>
+<pre><code>┌────────────────────────────────┬────────────────────────────────┐
+│ approx_count_distinct(ring_id) │ approx_quantile(weight_g, 0.9) │
+├────────────────────────────────┼────────────────────────────────┤
+│ 404                            │ 1236                           │
+└────────────────────────────────┴────────────────────────────────┘
+</code></pre>
+<h2>窗口函数和 ASOF 连接</h2>
+<p>窗口函数基于相邻行计算，但不会把行合并掉。<code>daily_counts</code> 表每个池塘每天一行，包括没有观测到鸭子的日子。下面的查询给出逐日变化和七天滚动平均：</p>
+<pre><code>SELECT
+    pond,
+    seen_at,
+    ducks,
+    ducks - lag(ducks) OVER w                      AS change,
+    round(avg(ducks) OVER (w ROWS 6 PRECEDING), 2) AS rolling_7
+FROM daily_counts
+WINDOW w AS (PARTITION BY pond ORDER BY seen_at)
+ORDER BY pond, seen_at
+LIMIT 8;
+</code></pre>
+<pre><code>┌──────┬────────────┬───────┬────────┬───────────┐
+│ pond │  seen_at   │ ducks │ change │ rolling_7 │
+├──────┼────────────┼───────┼────────┼───────────┤
+│ mill │ 2025-10-01 │ 0     │ NULL   │ 0.0       │
+│ mill │ 2025-10-02 │ 0     │ 0      │ 0.0       │
+│ mill │ 2025-10-03 │ 0     │ 0      │ 0.0       │
+│ mill │ 2025-10-04 │ 1     │ 1      │ 0.25      │
+│ mill │ 2025-10-05 │ 0     │ -1     │ 0.2       │
+│ mill │ 2025-10-06 │ 0     │ 0      │ 0.17      │
+│ mill │ 2025-10-07 │ 0     │ 0      │ 0.14      │
+│ mill │ 2025-10-08 │ 2     │ 2      │ 0.43      │
+└──────┴────────────┴───────┴────────┴───────────┘
+</code></pre>
+<p><strong><code>QUALIFY</code> 可以直接按窗口函数的结果过滤，</strong> 所以找每个池塘最近一次观测时不需要子查询：</p>
+<pre><code>SELECT pond, ring_id, species, seen_at
+FROM sightings
+QUALIFY row_number() OVER (PARTITION BY pond ORDER BY seen_at DESC) = 1
+ORDER BY pond;
+</code></pre>
+<pre><code>┌───────┬─────────┬─────────┬─────────────────────┐
+│ pond  │ ring_id │ species │       seen_at       │
+├───────┼─────────┼─────────┼─────────────────────┤
+│ mill  │ R0015   │ mallard │ 2026-04-18 18:17:29 │
+│ north │ R0077   │ mallard │ 2026-04-14 09:02:03 │
+│ reed  │ R0044   │ teal    │ 2026-04-18 21:44:23 │
+│ south │ R0045   │ wigeon  │ 2026-04-11 16:29:40 │
+└───────┴─────────┴─────────┴─────────────────────┘
+</code></pre>
+<p><strong><a href="https://duckdb.org/2023/09/15/asof-joins-fuzzy-temporal-lookups.html" rel="noopener noreferrer"><code>ASOF JOIN</code></a> 把每一行匹配到另一张表中时间上最近的前一行。</strong> 当两条时间序列的时间戳从不完全重合时，比如观测记录和天气读数，它是合适的工具。<code>weather</code> 表在每个池塘每六小时有一次读数，下面的查询为每次观测附上最近一次的读数：</p>
+<pre><code>SELECT s.ring_id, s.seen_at, w.temp_c, w.wind_kmh
+FROM sightings s
+ASOF JOIN weather w
+  ON s.pond = w.pond
+ AND s.seen_at &gt;= w.read_at
+ORDER BY s.seen_at
+LIMIT 5;
+</code></pre>
+<pre><code>┌─────────┬─────────────────────┬────────┬──────────┐
+│ ring_id │       seen_at       │ temp_c │ wind_kmh │
+├─────────┼─────────────────────┼────────┼──────────┤
+│ R0096   │ 2025-10-01 03:52:49 │ 10.1   │ 20.0     │
+│ R0109   │ 2025-10-01 09:11:24 │ 9.3    │ 33.3     │
+│ R0215   │ 2025-10-01 10:59:02 │ 9.2    │ 31.8     │
+│ R0315   │ 2025-10-01 20:44:16 │ 10.4   │ 26.4     │
+│ R0076   │ 2025-10-01 21:17:05 │ 10.4   │ 26.4     │
+└─────────┴─────────────────────┴────────┴──────────┘
+</code></pre>
+<p><strong>小贴士：列表留在一列里。</strong> <code>list()</code> 把一组值收集成一个数组值，列表函数可以直接作用在这个数组上，无需展开。</p>
+<pre><code>SELECT pond,
+       list(ring_id ORDER BY seen_at)[1:3] AS first_three_rings,
+       len(list(ring_id))                  AS sightings
+FROM sightings
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌───────┬───────────────────────┬───────────┐
+│ pond  │   first_three_rings   │ sightings │
+├───────┼───────────────────────┼───────────┤
+│ mill  │ [R0125, R0127, R0122] │ 96        │
+│ north │ [R0096, R0160, R0180] │ 117       │
+│ reed  │ [R0109, R0323, R0312] │ 80        │
+│ south │ [R0215, R0315, R0076] │ 107       │
+└───────┴───────────────────────┴───────────┘
+</code></pre>
+<h2>把列写好：分区、排序和窄类型</h2>
+<p>数据怎么写，决定了之后的查询能读多快。文章的建议是：写成 Parquet，按大家常用来过滤的列分区，并通过排序让相似的值挨在一起。</p>
+<p>下面的查询把观测数据写到 <code>lake/year=2026/pond=north/</code> 这样的文件夹里，每个文件夹中是压缩过的 Parquet 文件：</p>
+<pre><code>COPY (SELECT *, year(seen_at) AS year FROM sightings)
+TO 'lake'
+(FORMAT parquet, PARTITION_BY (year, pond), COMPRESSION zstd);
+</code></pre>
+<p><strong>写入前先排序。</strong> 压缩在连续相同值上效果最好。先按低基数列排序，可以让这些连续段更长，也让最小值和最大值统计更紧凑，从而跳过更多行组。</p>
+<pre><code>COPY (SELECT * FROM sightings ORDER BY pond, species, seen_at)
+TO 'sightings_sorted.parquet' (FORMAT parquet, ROW_GROUP_SIZE 122_880);
+</code></pre>
+<p><strong>选用窄类型。</strong> 类型越小，占用空间越少。小而固定的取值集合用 <code>ENUM</code>，不需要时间时用 <code>DATE</code> 代替 <code>TIMESTAMP</code>，数值始终较小时用 <code>SMALLINT</code>。这里 <code>species</code> 只有五种可能的值，所以改成 <code>ENUM</code>：</p>
+<pre><code>CREATE TYPE species_t AS ENUM ('mallard', 'teal', 'wigeon', 'pintail', 'tufted');
+ALTER TABLE sightings ALTER species TYPE species_t;
+</code></pre>
+<p><strong>看执行计划，不要靠猜。</strong> <code>EXPLAIN ANALYZE</code> 显示读取了哪些列、哪些过滤条件被下推到了扫描中，以及时间花在了哪里：</p>
+<pre><code>EXPLAIN ANALYZE
+SELECT species, count(*) FROM 'lake/**/*.parquet' WHERE pond = 'north' GROUP BY ALL;
+</code></pre>
+<p>这里要看的是输出中的表扫描部分。因为 <code>pond</code> 是分区列，DuckDB 只扫描了 8 个文件中的 2 个，而且只读取了 <code>species</code> 一列：</p>
+<pre><code>Table Scan
+  Function: PARQUET_SCAN
+  Projections: species
+  File Filters: pond = 'north'
+  Scanning Files: 2/8
+  Total Files Read: 2
+</code></pre>
+<p><strong>小贴士：写明列名，生产环境中避免 <code>SELECT *</code>。</strong> 每少选一列，DuckDB 就少解压一列。在一张 60 列的表上，只选 4 列可以大幅减少读取的数据量。</p>
+<p><strong>直接查询 DataFrame。</strong> DuckDB 可以直接查询 pandas 和 Polars 的 DataFrame 以及 Arrow 表，并以同样的格式返回结果。把结果转成 Polars 要经过 Arrow，所以还需要安装 <code>pyarrow</code>。</p>
+<pre><code>import duckdb
+import polars as pl
+
+sightings = pl.read_parquet("sightings/2026.parquet")
+duckdb.sql("SELECT pond, count(*) AS sightings FROM sightings GROUP BY ALL ORDER BY ALL").pl()
+</code></pre>
+<pre><code>shape: (4, 2)
+┌───────┬───────────┐
+│ pond  ┆ sightings │
+│ ---   ┆ ---       │
+│ str   ┆ i64       │
+╞═══════╪═══════════╡
+│ mill  ┆ 54        │
+│ north ┆ 58        │
+│ reed  ┆ 48        │
+│ south ┆ 56        │
+└───────┴───────────┘
+</code></pre>
+<h2>结论：只读查询需要的列和值</h2>
+<p>文中每个功能都遵循同一条规则：只读取查询需要的列和值。文章用一张表总结了这些技巧：</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>技巧</th>
+<th>省掉了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FROM 'file.parquet'</code></td>
+<td>查询前先导入数据</td>
+</tr>
+<tr>
+<td><code>SELECT * EXCLUDE (...)</code></td>
+<td>为了去掉 2 列而列出 40 列</td>
+</tr>
+<tr>
+<td><code>COLUMNS('regex')</code></td>
+<td>每一列重复写同一个表达式</td>
+</tr>
+<tr>
+<td><code>SUMMARIZE</code></td>
+<td>手写数据画像查询</td>
+</tr>
+<tr>
+<td><code>GROUP BY ALL</code></td>
+<td>让 <code>SELECT</code> 和 <code>GROUP BY</code> 保持同步</td>
+</tr>
+<tr>
+<td><code>count(*) FILTER (WHERE ...)</code></td>
+<td>每个类别各写一个查询</td>
+</tr>
+<tr>
+<td><code>PIVOT</code> / <code>UNPIVOT</code></td>
+<td>成片的 <code>CASE</code> 表达式</td>
+</tr>
+<tr>
+<td><code>QUALIFY</code></td>
+<td>包在窗口函数外面的子查询</td>
+</tr>
+<tr>
+<td><code>ASOF JOIN</code></td>
+<td>模糊的时间匹配逻辑</td>
+</tr>
+<tr>
+<td><code>COPY ... PARTITION_BY</code></td>
+<td>手工搭建的文件夹结构</td>
+</tr>
+<tr>
+<td><code>COPY</code> 之前先 <code>ORDER BY</code></td>
+<td>压缩差、行组无法跳过</td>
+</tr>
+<tr>
+<td><code>EXPLAIN ANALYZE</code></td>
+<td>猜时间花在了哪里</td>
+</tr>
+</tbody>
+</table>
+<p>行式存储（比如事务型数据库系统）把每条记录存在一起，适合整条记录的查找。分析型查询通常需要的正好相反：跨大量记录的少数几列。文章最后用了一个双关收尾：把鸭子按列排好（Keep your ducks in a column），查询就能跟得上。</p>
+<section class="rewrite-source-media" aria-label="原文附带媒体"><h3 class="source-media-heading">原文附带媒体</h3><p class="completeness-note">原文附带媒体；未核验其与具体段落的对应关系。</p><div class="original-media">
+<figure class="media-figure" data-media-id="duckdb_ducks_column_header"><div class="media-frame"><img src="https://duckdb.org/images/blog/thumbs/ducks-column.svg" data-original-src="https://duckdb.org/images/blog/thumbs/ducks-column.svg" alt="原文配图" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://duckdb.org/2026/11/10/ducks-in-a-column.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div></section></div></section>
+<section class="reader-panel" id="original" data-reader-panel="original" aria-label="原文">
+<h2 class="section-heading">原文</h2><p class="completeness-note">原文正文取自 DuckDB 官方博客页面并转为 Markdown；文章头图移到上方媒体区，以 [Header image] 标出原位置；页面导航、文内目录和“Recent posts”推荐区未保存，小标题上的页内锚点链接已去掉，代码块未保留语法高亮标记。原页署名为 The DuckDB team，标注 8 min read。</p><h3 class="original-title">Ducks in a Column</h3>
+<div class="original-media">
+<figure class="media-figure" data-media-id="duckdb_ducks_column_header"><div class="media-frame"><img src="https://duckdb.org/images/blog/thumbs/ducks-column.svg" data-original-src="https://duckdb.org/images/blog/thumbs/ducks-column.svg" alt="原文配图" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://duckdb.org/2026/11/10/ducks-in-a-column.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div>
+<div class="prose" lang="en"><p>[Header image: shown in the media section above]</p>
+<p><em>TL;DR: DuckDB is fast among other reasons because it stores data by column, so a query reads only the columns it names. This post covers DuckDB features that take advantage of that design choice: querying files in place, column-level SQL, aggregation shortcuts, window functions, ASOF joins, and writing well-organized Parquet.</em></p>
+<h2>Why Columns?</h2>
+<p>DuckDB stores each column separately instead of storing each row as one record. A query that touches three columns out of fifty reads only those three.</p>
+<p>That design choice explains many of DuckDB’s performance features. Columnar storage <a href="https://duckdb.org/2022/10/28/lightweight-compression.html" rel="noopener noreferrer">compresses well</a> because a column holds values of one type, and those values often repeat. The engine processes each column in vectors of 2,048 values at a time. And a query that asks for fewer columns does less work.</p>
+<p>The examples in this post use a sample dataset of 400 ducks, each marked with a numbered leg band (a ring) and seen at one of four ponds between October 2025 and April 2026. The <code>sightings</code> table has five columns: <code>ring_id</code>, <code>pond</code>, <code>species</code>, <code>weight_g</code>, and <code>seen_at</code>.</p>
+<pre><code>SELECT * FROM sightings LIMIT 3;
+</code></pre>
+<pre><code>┌─────────┬───────┬─────────┬──────────┬─────────────────────┐
+│ ring_id │ pond  │ species │ weight_g │       seen_at       │
+├─────────┼───────┼─────────┼──────────┼─────────────────────┤
+│ R0001   │ south │ wigeon  │ 862      │ 2025-11-06 12:18:38 │
+│ R0002   │ south │ wigeon  │ 578      │ 2025-12-04 00:12:54 │
+│ R0003   │ south │ wigeon  │ 734      │ 2026-01-06 16:50:41 │
+└─────────┴───────┴─────────┴──────────┴─────────────────────┘
+</code></pre>
+<p>Every example runs in the DuckDB CLI or from Python with <code>duckdb.sql(...)</code>.</p>
+<pre><code>pip install duckdb                        # Python
+curl https://install.duckdb.org | bash    # CLI
+</code></pre>
+<h2>Querying Files in Place</h2>
+<p>You don’t need to load data before you query it. DuckDB treats a file path as a table and infers column names and types from the file.</p>
+<pre><code>SELECT * FROM 'ponds.csv';
+</code></pre>
+<pre><code>┌─────────┬───────┬─────────┐
+│ pond_id │ pond  │ area_m2 │
+├─────────┼───────┼─────────┤
+│ 0007    │ north │ 4200    │
+│ 0042    │ south │ 1800    │
+│ 0113    │ mill  │ 950     │
+│ 0256    │ reed  │ 3100    │
+└─────────┴───────┴─────────┘
+</code></pre>
+<p>A glob pattern queries a whole folder of Parquet files. With <code>filename = true</code>, DuckDB adds the file name as a column:</p>
+<pre><code>SELECT filename, count(*) AS sightings
+FROM read_parquet('sightings/*.parquet', filename = true)
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌────────────────────────┬───────────┐
+│        filename        │ sightings │
+├────────────────────────┼───────────┤
+│ sightings/2025.parquet │ 184       │
+│ sightings/2026.parquet │ 216       │
+└────────────────────────┴───────────┘
+</code></pre>
+<p>DuckDB can also read remote files over <a href="https://duckdb.org/docs/2.0/core_extensions/httpfs/https.html" rel="noopener noreferrer">HTTPS</a> or <a href="https://duckdb.org/docs/2.0/core_extensions/httpfs/s3api.html" rel="noopener noreferrer">S3</a>. The <a href="https://duckdb.org/docs/2.0/core_extensions/httpfs/overview.html" rel="noopener noreferrer">httpfs extension</a> loads automatically when you use these paths:</p>
+<pre><code>SELECT * FROM 's3://wetlands/2026/*.parquet';
+</code></pre>
+<p>The <a href="https://duckdb.org/docs/2.0/data/parquet/overview.html" rel="noopener noreferrer">Parquet file format</a> also stores data by column. DuckDB reads only the columns your query names. Parquet also stores min and max statistics for each row group, so DuckDB can skip row groups whose statistics rule out a filter (<a href="https://duckdb.org/docs/2.0/guides/performance/indexing.html#zonemaps" rel="noopener noreferrer">zonemaps</a>).</p>
+<pre><code>SELECT species, count(*) AS sightings
+FROM 'sightings/*.parquet'
+WHERE seen_at &gt;= DATE '2026-01-01'
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌─────────┬───────────┐
+│ species │ sightings │
+├─────────┼───────────┤
+│ mallard │ 89        │
+│ pintail │ 29        │
+│ teal    │ 37        │
+│ tufted  │ 29        │
+│ wigeon  │ 32        │
+└─────────┴───────────┘
+</code></pre>
+<blockquote>
+<p>Tip <strong>Check the sniffer’s work.</strong> When a CSV loads with unexpected types, ask DuckDB what it guessed. Then pin the types you need.</p>
+</blockquote>
+<pre><code>DESCRIBE SELECT * FROM 'ponds.csv';
+</code></pre>
+<pre><code>┌─────────────┬─────────────┬──────┬──────┬─────────┬───────┐
+│ column_name │ column_type │ null │ key  │ default │ extra │
+├─────────────┼─────────────┼──────┼──────┼─────────┼───────┤
+│ pond_id     │ VARCHAR     │ YES  │ NULL │ NULL    │ NULL  │
+│ pond        │ VARCHAR     │ YES  │ NULL │ NULL    │ NULL  │
+│ area_m2     │ BIGINT      │ YES  │ NULL │ NULL    │ NULL  │
+└─────────────┴─────────────┴──────┴──────┴─────────┴───────┘
+</code></pre>
+<p>The sniffer keeps <code>pond_id</code> as text, so the leading zeros survive. To override a guess, pass the type explicitly:</p>
+<pre><code>SELECT * FROM read_csv('ponds.csv', types = {'area_m2': 'DOUBLE'});
+</code></pre>
+<blockquote>
+<p>Tip <strong>Hive partitions become columns.</strong> A path like <code>year=2026/pond=north/</code> turns into <code>year</code> and <code>pond</code> columns, and filters on them skip folders entirely. The next section creates this layout.</p>
+</blockquote>
+<pre><code>SELECT count(*)
+FROM read_parquet('lake/*/*/*.parquet', hive_partitioning = true)
+WHERE year = 2026 AND pond = 'north';
+</code></pre>
+<pre><code>┌──────────────┐
+│ count_star() │
+├──────────────┤
+│ 58           │
+└──────────────┘
+</code></pre>
+<h2>Column-Level SQL</h2>
+<p>DuckDB’s <a href="https://duckdb.org/docs/2.0/sql/dialect/friendly_sql.html" rel="noopener noreferrer">friendly SQL</a> lets you select, exclude, and transform columns in bulk. On wide tables, this saves typing and keeps queries readable.</p>
+<p><strong>Drop columns with <code>EXCLUDE</code>, or rewrite them in place with <code>REPLACE</code>.</strong></p>
+<pre><code>SELECT * EXCLUDE (ring_id) FROM sightings LIMIT 3;
+</code></pre>
+<pre><code>┌───────┬─────────┬──────────┬─────────────────────┐
+│ pond  │ species │ weight_g │       seen_at       │
+├───────┼─────────┼──────────┼─────────────────────┤
+│ south │ wigeon  │ 862      │ 2025-11-06 12:18:38 │
+│ south │ wigeon  │ 578      │ 2025-12-04 00:12:54 │
+│ south │ wigeon  │ 734      │ 2026-01-06 16:50:41 │
+└───────┴─────────┴──────────┴─────────────────────┘
+</code></pre>
+<pre><code>SELECT * REPLACE (upper(species) AS species) FROM sightings LIMIT 3;
+</code></pre>
+<pre><code>┌─────────┬───────┬─────────┬──────────┬─────────────────────┐
+│ ring_id │ pond  │ species │ weight_g │       seen_at       │
+├─────────┼───────┼─────────┼──────────┼─────────────────────┤
+│ R0001   │ south │ WIGEON  │ 862      │ 2025-11-06 12:18:38 │
+│ R0002   │ south │ WIGEON  │ 578      │ 2025-12-04 00:12:54 │
+│ R0003   │ south │ WIGEON  │ 734      │ 2026-01-06 16:50:41 │
+└─────────┴───────┴─────────┴──────────┴─────────────────────┘
+</code></pre>
+<p><strong>Select columns by pattern with <code>COLUMNS()</code>.</strong> It takes a regular expression, a list of names, or a lambda, and applies an expression to every matching column. The <code>pond_readings</code> table has three temperature columns, so this query returns the highest reading for each:</p>
+<pre><code>SELECT max(COLUMNS('^temp_')) FROM pond_readings;
+</code></pre>
+<pre><code>┌────────────────┬─────────────┬────────────────┐
+│ temp_morning_c │ temp_noon_c │ temp_evening_c │
+├────────────────┼─────────────┼────────────────┤
+│ 8.0            │ 13.7        │ 8.3            │
+└────────────────┴─────────────┴────────────────┘
+</code></pre>
+<p>The same pattern handles missing values. This query replaces each <code>NULL</code> with <code>0</code> in every column whose name ends in <code>_count</code>:</p>
+<pre><code>SELECT coalesce(COLUMNS(lambda c: c LIKE '%_count'), 0)
+FROM counts;
+</code></pre>
+<pre><code>┌───────────────┬────────────┬──────────────┐
+│ mallard_count │ teal_count │ wigeon_count │
+├───────────────┼────────────┼──────────────┤
+│ 12            │ 0          │ 3            │
+│ 0             │ 4          │ 1            │
+│ 7             │ 2          │ 0            │
+│ 0             │ 0          │ 5            │
+└───────────────┴────────────┴──────────────┘
+</code></pre>
+<p>You can rename matching columns as you select them. In the replacement, <code>\1</code> refers to the first capture group:</p>
+<pre><code>SELECT COLUMNS('temp_(.*)_c') AS '\1_celsius'
+FROM pond_readings
+LIMIT 3;
+</code></pre>
+<pre><code>┌─────────────────┬──────────────┬─────────────────┐
+│ morning_celsius │ noon_celsius │ evening_celsius │
+├─────────────────┼──────────────┼─────────────────┤
+│ 6.3             │ 9.1          │ 8.0             │
+│ 6.9             │ 10.7         │ 6.6             │
+│ 7.8             │ 8.8          │ 7.9             │
+└─────────────────┴──────────────┴─────────────────┘
+</code></pre>
+<p><strong>Start with <code>FROM</code>.</strong> You can lead with the table and leave out <code>SELECT</code>. <code>FROM sightings;</code> alone is the same as <code>SELECT * FROM sightings;</code>.</p>
+<pre><code>FROM sightings SELECT species, pond LIMIT 3;
+</code></pre>
+<pre><code>┌─────────┬───────┐
+│ species │ pond  │
+├─────────┼───────┤
+│ wigeon  │ south │
+│ wigeon  │ south │
+│ wigeon  │ south │
+└─────────┴───────┘
+</code></pre>
+<p><strong>Pack columns into a <code>STRUCT</code>.</strong> A struct is a single column with named fields. Unpack one with <code>.*</code> to turn its fields back into top-level columns:</p>
+<pre><code>SELECT sighting.* FROM (
+    SELECT {'species': species, 'pond': pond} AS sighting FROM sightings
+)
+LIMIT 3;
+</code></pre>
+<pre><code>┌─────────┬───────┐
+│ species │ pond  │
+├─────────┼───────┤
+│ wigeon  │ south │
+│ wigeon  │ south │
+│ wigeon  │ south │
+└─────────┴───────┘
+</code></pre>
+<blockquote>
+<p>Tip <strong>Let DuckDB profile the columns.</strong> <code>SUMMARIZE</code> returns one row per column, with its type, min, max, approximate distinct count, null percentage, and quartiles.</p>
+</blockquote>
+<pre><code>SUMMARIZE sightings;
+SUMMARIZE SELECT * FROM 'sightings/*.parquet';
+</code></pre>
+<h2>Aggregation Shortcuts</h2>
+<p>Aggregates benefit from columnar storage because summing a column means scanning one column of values. DuckDB adds syntax that keeps the SQL as short as the work.</p>
+<p><strong><a href="https://duckdb.org/docs/2.0/sql/query_syntax/groupby.html#group-by-all" rel="noopener noreferrer"><code>GROUP BY ALL</code></a> groups by every non-aggregated column in the <code>SELECT</code> clause, so you don’t repeat the list.</strong></p>
+<pre><code>SELECT pond, species, count(*) AS sightings, round(avg(weight_g)) AS avg_weight_g
+FROM sightings
+GROUP BY ALL
+ORDER BY ALL
+LIMIT 5;
+</code></pre>
+<pre><code>┌──────┬─────────┬───────────┬──────────────┐
+│ pond │ species │ sightings │ avg_weight_g │
+├──────┼─────────┼───────────┼──────────────┤
+│ mill │ mallard │ 46        │ 1110.0       │
+│ mill │ pintail │ 11        │ 910.0        │
+│ mill │ teal    │ 15        │ 352.0        │
+│ mill │ tufted  │ 10        │ 879.0        │
+│ mill │ wigeon  │ 14        │ 720.0        │
+└──────┴─────────┴───────────┴──────────────┘
+</code></pre>
+<p><strong><code>FILTER</code> counts several categories in one pass,</strong> instead of running one query per category:</p>
+<pre><code>SELECT
+    pond,
+    count(*) FILTER (WHERE species = 'mallard') AS mallards,
+    count(*) FILTER (WHERE species = 'teal')    AS teals,
+    count(*) FILTER (WHERE weight_g &gt; 1200)     AS heavyweights
+FROM sightings
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌───────┬──────────┬───────┬──────────────┐
+│ pond  │ mallards │ teals │ heavyweights │
+├───────┼──────────┼───────┼──────────────┤
+│ mill  │ 46       │ 15    │ 16           │
+│ north │ 48       │ 17    │ 12           │
+│ reed  │ 26       │ 14    │ 6            │
+│ south │ 48       │ 19    │ 16           │
+└───────┴──────────┴───────┴──────────────┘
+</code></pre>
+<p><strong><code>arg_max</code> returns the value from the row with the largest value of another column,</strong> so you don’t need a self-join. Here it finds the species of the heaviest bird at each pond:</p>
+<pre><code>SELECT pond,
+       arg_max(species, weight_g) AS heaviest_species,
+       max(weight_g) AS max_weight_g
+FROM sightings
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌───────┬──────────────────┬──────────────┐
+│ pond  │ heaviest_species │ max_weight_g │
+├───────┼──────────────────┼──────────────┤
+│ mill  │ mallard          │ 1358         │
+│ north │ mallard          │ 1359         │
+│ reed  │ mallard          │ 1312         │
+│ south │ mallard          │ 1357         │
+└───────┴──────────────────┴──────────────┘
+</code></pre>
+<p><strong><code>PIVOT</code> and <code>UNPIVOT</code> turn rows into columns and back.</strong> <code>PIVOT</code> makes one column per distinct value, here one column per species:</p>
+<pre><code>PIVOT sightings ON species USING count(*) GROUP BY pond ORDER BY pond;
+</code></pre>
+<pre><code>┌───────┬─────────┬─────────┬──────┬────────┬────────┐
+│ pond  │ mallard │ pintail │ teal │ tufted │ wigeon │
+├───────┼─────────┼─────────┼──────┼────────┼────────┤
+│ mill  │ 46      │ 11      │ 15   │ 10     │ 14     │
+│ north │ 48      │ 19      │ 17   │ 16     │ 17     │
+│ reed  │ 26      │ 11      │ 14   │ 13     │ 16     │
+│ south │ 48      │ 11      │ 19   │ 14     │ 15     │
+└───────┴─────────┴─────────┴──────┴────────┴────────┘
+</code></pre>
+<p><code>UNPIVOT</code> goes the other way. The <code>monthly_counts</code> table has one column per month, so this query turns those columns back into rows:</p>
+<pre><code>SELECT * FROM (
+    UNPIVOT monthly_counts
+    ON COLUMNS(* EXCLUDE pond)
+    INTO NAME month VALUE sightings
+)
+WHERE pond = 'north';
+</code></pre>
+<pre><code>┌───────┬───────┬───────────┐
+│ pond  │ month │ sightings │
+├───────┼───────┼───────────┤
+│ north │ Apr   │ 6         │
+│ north │ Dec   │ 18        │
+│ north │ Feb   │ 14        │
+│ north │ Jan   │ 21        │
+│ north │ Mar   │ 17        │
+│ north │ Nov   │ 20        │
+│ north │ Oct   │ 21        │
+└───────┴───────┴───────────┘
+</code></pre>
+<blockquote>
+<p>Tip <strong>Approximate when exact is expensive.</strong> On billions of rows, <code>approx_count_distinct</code> and <code>approx_quantile</code> use a fraction of the memory of their exact counterparts. On this small table, the estimate of 404 distinct rings is close to the exact count of 400.</p>
+</blockquote>
+<pre><code>SELECT approx_count_distinct(ring_id), approx_quantile(weight_g, 0.9)
+FROM sightings;
+</code></pre>
+<pre><code>┌────────────────────────────────┬────────────────────────────────┐
+│ approx_count_distinct(ring_id) │ approx_quantile(weight_g, 0.9) │
+├────────────────────────────────┼────────────────────────────────┤
+│ 404                            │ 1236                           │
+└────────────────────────────────┴────────────────────────────────┘
+</code></pre>
+<h2>Window Functions and ASOF Joins</h2>
+<p>Window functions compute over neighboring rows without collapsing them. The <code>daily_counts</code> table has one row per pond per day, including days with no sightings. This query shows the day-over-day change and a rolling seven-day average:</p>
+<pre><code>SELECT
+    pond,
+    seen_at,
+    ducks,
+    ducks - lag(ducks) OVER w                      AS change,
+    round(avg(ducks) OVER (w ROWS 6 PRECEDING), 2) AS rolling_7
+FROM daily_counts
+WINDOW w AS (PARTITION BY pond ORDER BY seen_at)
+ORDER BY pond, seen_at
+LIMIT 8;
+</code></pre>
+<pre><code>┌──────┬────────────┬───────┬────────┬───────────┐
+│ pond │  seen_at   │ ducks │ change │ rolling_7 │
+├──────┼────────────┼───────┼────────┼───────────┤
+│ mill │ 2025-10-01 │ 0     │ NULL   │ 0.0       │
+│ mill │ 2025-10-02 │ 0     │ 0      │ 0.0       │
+│ mill │ 2025-10-03 │ 0     │ 0      │ 0.0       │
+│ mill │ 2025-10-04 │ 1     │ 1      │ 0.25      │
+│ mill │ 2025-10-05 │ 0     │ -1     │ 0.2       │
+│ mill │ 2025-10-06 │ 0     │ 0      │ 0.17      │
+│ mill │ 2025-10-07 │ 0     │ 0      │ 0.14      │
+│ mill │ 2025-10-08 │ 2     │ 2      │ 0.43      │
+└──────┴────────────┴───────┴────────┴───────────┘
+</code></pre>
+<p><strong><code>QUALIFY</code> filters on a window function directly,</strong> so finding the latest sighting at each pond doesn’t need a subquery:</p>
+<pre><code>SELECT pond, ring_id, species, seen_at
+FROM sightings
+QUALIFY row_number() OVER (PARTITION BY pond ORDER BY seen_at DESC) = 1
+ORDER BY pond;
+</code></pre>
+<pre><code>┌───────┬─────────┬─────────┬─────────────────────┐
+│ pond  │ ring_id │ species │       seen_at       │
+├───────┼─────────┼─────────┼─────────────────────┤
+│ mill  │ R0015   │ mallard │ 2026-04-18 18:17:29 │
+│ north │ R0077   │ mallard │ 2026-04-14 09:02:03 │
+│ reed  │ R0044   │ teal    │ 2026-04-18 21:44:23 │
+│ south │ R0045   │ wigeon  │ 2026-04-11 16:29:40 │
+└───────┴─────────┴─────────┴─────────────────────┘
+</code></pre>
+<p><strong><a href="https://duckdb.org/2023/09/15/asof-joins-fuzzy-temporal-lookups.html" rel="noopener noreferrer"><code>ASOF JOIN</code></a> matches each row to the nearest earlier row in another table.</strong> It’s the right tool when two time series never share exact timestamps, such as sightings and weather readings. The <code>weather</code> table has a reading every six hours at each pond. This query attaches the most recent reading to each sighting:</p>
+<pre><code>SELECT s.ring_id, s.seen_at, w.temp_c, w.wind_kmh
+FROM sightings s
+ASOF JOIN weather w
+  ON s.pond = w.pond
+ AND s.seen_at &gt;= w.read_at
+ORDER BY s.seen_at
+LIMIT 5;
+</code></pre>
+<pre><code>┌─────────┬─────────────────────┬────────┬──────────┐
+│ ring_id │       seen_at       │ temp_c │ wind_kmh │
+├─────────┼─────────────────────┼────────┼──────────┤
+│ R0096   │ 2025-10-01 03:52:49 │ 10.1   │ 20.0     │
+│ R0109   │ 2025-10-01 09:11:24 │ 9.3    │ 33.3     │
+│ R0215   │ 2025-10-01 10:59:02 │ 9.2    │ 31.8     │
+│ R0315   │ 2025-10-01 20:44:16 │ 10.4   │ 26.4     │
+│ R0076   │ 2025-10-01 21:17:05 │ 10.4   │ 26.4     │
+└─────────┴─────────────────────┴────────┴──────────┘
+</code></pre>
+<blockquote>
+<p>Tip <strong>Lists stay in one column.</strong> <code>list()</code> gathers a group into a single array value, and list functions work on that array without unnesting it.</p>
+</blockquote>
+<pre><code>SELECT pond,
+       list(ring_id ORDER BY seen_at)[1:3] AS first_three_rings,
+       len(list(ring_id))                  AS sightings
+FROM sightings
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌───────┬───────────────────────┬───────────┐
+│ pond  │   first_three_rings   │ sightings │
+├───────┼───────────────────────┼───────────┤
+│ mill  │ [R0125, R0127, R0122] │ 96        │
+│ north │ [R0096, R0160, R0180] │ 117       │
+│ reed  │ [R0109, R0323, R0312] │ 80        │
+│ south │ [R0215, R0315, R0076] │ 107       │
+└───────┴───────────────────────┴───────────┘
+</code></pre>
+<h2>Writing Columns Well</h2>
+<p>How you write data determines how fast later queries can read it. Write Parquet, partition on the columns people filter by, and sort so that similar values sit together.</p>
+<p>This query writes the sightings to folders such as <code>lake/year=2026/pond=north/</code>, with compressed Parquet files in each:</p>
+<pre><code>COPY (SELECT *, year(seen_at) AS year FROM sightings)
+TO 'lake'
+(FORMAT parquet, PARTITION_BY (year, pond), COMPRESSION zstd);
+</code></pre>
+<p><strong>Sort before you write.</strong> Compression works best on runs of identical values. Sorting by low-cardinality columns first makes those runs longer, and it makes the min and max statistics tighter, so more row groups can be skipped.</p>
+<pre><code>COPY (SELECT * FROM sightings ORDER BY pond, species, seen_at)
+TO 'sightings_sorted.parquet' (FORMAT parquet, ROW_GROUP_SIZE 122_880);
+</code></pre>
+<p><strong>Pick narrow types.</strong> A smaller type takes less space. Use <code>ENUM</code> for small fixed sets, <code>DATE</code> instead of <code>TIMESTAMP</code> when you don’t need the time, and <code>SMALLINT</code> when values stay small. Here, <code>species</code> has only five possible values, so it becomes an <code>ENUM</code>:</p>
+<pre><code>CREATE TYPE species_t AS ENUM ('mallard', 'teal', 'wigeon', 'pintail', 'tufted');
+ALTER TABLE sightings ALTER species TYPE species_t;
+</code></pre>
+<p><strong>Check the plan rather than guessing.</strong> <code>EXPLAIN ANALYZE</code> shows which columns were read, which filters were pushed into the scan, and where the time went:</p>
+<pre><code>EXPLAIN ANALYZE
+SELECT species, count(*) FROM 'lake/**/*.parquet' WHERE pond = 'north' GROUP BY ALL;
+</code></pre>
+<p>The part of the output that matters here is the table scan. DuckDB scans 2 of the 8 files, because <code>pond</code> is a partition column, and it reads only the <code>species</code> column:</p>
+<pre><code>Table Scan
+  Function: PARQUET_SCAN
+  Projections: species
+  File Filters: pond = 'north'
+  Scanning Files: 2/8
+  Total Files Read: 2
+</code></pre>
+<blockquote>
+<p>Tip <strong>Name your columns, and avoid <code>SELECT *</code> in production.</strong> Every column you leave out is one DuckDB never decompresses. On a 60-column table, selecting 4 columns can cut the data read dramatically.</p>
+</blockquote>
+<p><strong>Query DataFrames in place.</strong> DuckDB queries pandas and Polars DataFrames and Arrow tables directly, and it returns results in the same formats. Converting a result to Polars goes through Arrow, so install <code>pyarrow</code> as well.</p>
+<pre><code>import duckdb
+import polars as pl
+
+sightings = pl.read_parquet("sightings/2026.parquet")
+duckdb.sql("SELECT pond, count(*) AS sightings FROM sightings GROUP BY ALL ORDER BY ALL").pl()
+</code></pre>
+<pre><code>shape: (4, 2)
+┌───────┬───────────┐
+│ pond  ┆ sightings │
+│ ---   ┆ ---       │
+│ str   ┆ i64       │
+╞═══════╪═══════════╡
+│ mill  ┆ 54        │
+│ north ┆ 58        │
+│ reed  ┆ 48        │
+│ south ┆ 56        │
+└───────┴───────────┘
+</code></pre>
+<h2>Conclusion</h2>
+<p>Each feature in this post follows one rule: read only the columns and values your query needs. This table summarizes the tricks:</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>Trick</th>
+<th>What it saves you</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FROM 'file.parquet'</code></td>
+<td>Loading data before querying it</td>
+</tr>
+<tr>
+<td><code>SELECT * EXCLUDE (...)</code></td>
+<td>Listing 40 columns to drop 2</td>
+</tr>
+<tr>
+<td><code>COLUMNS('regex')</code></td>
+<td>Repeating one expression per column</td>
+</tr>
+<tr>
+<td><code>SUMMARIZE</code></td>
+<td>Writing a profiling query by hand</td>
+</tr>
+<tr>
+<td><code>GROUP BY ALL</code></td>
+<td>Keeping <code>SELECT</code> and <code>GROUP BY</code> in sync</td>
+</tr>
+<tr>
+<td><code>count(*) FILTER (WHERE ...)</code></td>
+<td>One query per category</td>
+</tr>
+<tr>
+<td><code>PIVOT</code> / <code>UNPIVOT</code></td>
+<td>Walls of <code>CASE</code> expressions</td>
+</tr>
+<tr>
+<td><code>QUALIFY</code></td>
+<td>Subqueries around window functions</td>
+</tr>
+<tr>
+<td><code>ASOF JOIN</code></td>
+<td>Fuzzy time-matching logic</td>
+</tr>
+<tr>
+<td><code>COPY ... PARTITION_BY</code></td>
+<td>Hand-built folder layouts</td>
+</tr>
+<tr>
+<td><code>ORDER BY</code> before <code>COPY</code></td>
+<td>Poor compression and unskippable row groups</td>
+</tr>
+<tr>
+<td><code>EXPLAIN ANALYZE</code></td>
+<td>Guessing where the time went</td>
+</tr>
+</tbody>
+</table>
+<p>Row stores, such as transactional database systems, keep each record together. That suits lookups of one whole record. Analytical queries usually need the opposite: a few columns across many records. Keep your ducks in a column, and your queries will keep up.</p></div>
+</section>
+<footer class="source-box"><span>内容来自原作者；中文为新知编辑改写，非逐字翻译。</span><div><a href="https://duckdb.org/2026/11/10/ducks-in-a-column.html" target="_blank" rel="noopener noreferrer">打开原文 ↗</a></div></footer>
+</article></body></html>

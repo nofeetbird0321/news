@@ -1,5 +1,47 @@
 [
   {
+    "id": "duckdb-ducks-in-a-column",
+    "date": "2026-11-10",
+    "title": "DuckDB 官方导览：列式存储下的一组 SQL 写法，从直接查文件到写好 Parquet",
+    "dek": "DuckDB 团队用一个 400 只鸭子的样例数据集，演示 EXCLUDE、COLUMNS()、GROUP BY ALL、QUALIFY、ASOF JOIN、分区写入和 EXPLAIN ANALYZE 等功能，共同点是只读查询需要的列和值。",
+    "url": "/a/duckdb-ducks-in-a-column",
+    "source_url": "https://duckdb.org/2026/11/10/ducks-in-a-column.html",
+    "tags": [
+      "数据",
+      "DuckDB",
+      "SQL",
+      "Parquet"
+    ]
+  },
+  {
+    "id": "leanvm-pq-aggregation-folding-negative-results",
+    "date": "2026-11-08",
+    "title": "以太坊后量子签名聚合实测：哈希折叠打不过 leanVM 递归，换个叶子大小就把延迟降了 28%",
+    "dek": "ethresear.ch 上的一份测量报告：在 8 GB M2 上，三种基于哈希的累积方案和一种批处理设计都没胜过 leanVM 的完整验证器递归；真正起作用的是让合并节点停在 mu 25。",
+    "url": "/a/leanvm-pq-aggregation-folding-negative-results",
+    "source_url": "https://ethresear.ch/t/folding-vs-full-verifier-recursion-for-pq-signature-aggregation-in-leanvm-measurements-and-negative-results/26227",
+    "tags": [
+      "Web3",
+      "以太坊",
+      "后量子",
+      "零知识证明"
+    ]
+  },
+  {
+    "id": "mollick-fable-52-jagged-agi",
+    "date": "2026-11-09",
+    "title": "Ethan Mollick 试用 Claude Fable 5.2：几乎是 AGI，缺的是看出自己作品哪里不够好",
+    "dek": "一个模型先后当了电影人、硬件黑客、创业者、文学学者、社会科学家和 3D 世界建造者；Mollick 的结论是“锯齿状 AGI”：它会查错，却不会自己发现作品太长、太闷，或被自建的规则捆住。",
+    "url": "/a/mollick-fable-52-jagged-agi",
+    "source_url": "https://www.oneusefulthing.org/p/fable-52-and-jagged-agi",
+    "tags": [
+      "AI",
+      "Claude",
+      "智能体",
+      "AGI"
+    ]
+  },
+  {
     "id": "vitalik-cryptographic-world-computer",
     "date": "2026-09-27",
     "title": "Vitalik：以太坊正在从“区块链”变成“密码学世界计算机”",

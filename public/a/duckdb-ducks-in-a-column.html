@@ -1,0 +1,1792 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta name="referrer" content="no-referrer">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DuckDB 官方导览：列式存储下的一组 SQL 写法，从直接查文件到写好 Parquet · 新知</title>
+<meta name="description" content="DuckDB 团队用一个 400 只鸭子的样例数据集，演示 EXCLUDE、COLUMNS()、GROUP BY ALL、QUALIFY、ASOF JOIN、分区写入和 EXPLAIN ANALYZE 等功能，共同点是只读查询需要的列和值。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fffefa">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="新知">
+<meta property="og:title" content="DuckDB 官方导览：列式存储下的一组 SQL 写法，从直接查文件到写好 Parquet · 新知">
+<meta property="og:description" content="DuckDB 团队用一个 400 只鸭子的样例数据集，演示 EXCLUDE、COLUMNS()、GROUP BY ALL、QUALIFY、ASOF JOIN、分区写入和 EXPLAIN ANALYZE 等功能，共同点是只读查询需要的列和值。">
+<meta property="og:url" content="https://news.nofeetbird.tech/a/duckdb-ducks-in-a-column">
+<link rel="canonical" href="https://news.nofeetbird.tech/a/duckdb-ducks-in-a-column">
+<meta property="og:locale" content="zh_CN">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="DuckDB 官方导览：列式存储下的一组 SQL 写法，从直接查文件到写好 Parquet · 新知">
+<meta name="twitter:description" content="DuckDB 团队用一个 400 只鸭子的样例数据集，演示 EXCLUDE、COLUMNS()、GROUP BY ALL、QUALIFY、ASOF JOIN、分区写入和 EXPLAIN ANALYZE 等功能，共同点是只读查询需要的列和值。">
+<meta property="og:image" content="https://duckdb.org/images/blog/thumbs/ducks-column.svg">
+<meta name="twitter:image" content="https://duckdb.org/images/blog/thumbs/ducks-column.svg">
+<meta property="article:published_time" content="2026-11-11T08:06:00+08:00">
+<script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "Organization", "@id": "https://news.nofeetbird.tech/#publisher", "name": "新知", "url": "https://news.nofeetbird.tech/", "description": "AI、Web3 与数据领域海外一手长文的中文改写选刊"}, {"@type": "WebSite", "@id": "https://news.nofeetbird.tech/#website", "name": "新知", "url": "https://news.nofeetbird.tech/", "inLanguage": "zh-CN", "publisher": {"@id": "https://news.nofeetbird.tech/#publisher"}}, {"@type": "Article", "@id": "https://news.nofeetbird.tech/a/duckdb-ducks-in-a-column#article", "url": "https://news.nofeetbird.tech/a/duckdb-ducks-in-a-column", "mainEntityOfPage": {"@id": "https://news.nofeetbird.tech/a/duckdb-ducks-in-a-column#page"}, "headline": "DuckDB 官方导览：列式存储下的一组 SQL 写法，从直接查文件到写好 Parquet", "description": "DuckDB 团队用一个 400 只鸭子的样例数据集，演示 EXCLUDE、COLUMNS()、GROUP BY ALL、QUALIFY、ASOF JOIN、分区写入和 EXPLAIN ANALYZE 等功能，共同点是只读查询需要的列和值。", "inLanguage": "zh-CN", "datePublished": "2026-11-11T08:06:00+08:00", "author": {"@id": "https://news.nofeetbird.tech/#publisher"}, "publisher": {"@id": "https://news.nofeetbird.tech/#publisher"}, "isBasedOn": {"@type": "CreativeWork", "url": "https://duckdb.org/2026/11/10/ducks-in-a-column.html", "name": "Ducks in a Column", "datePublished": "2026-11-10T00:00:00+00:00"}, "citation": "https://duckdb.org/2026/11/10/ducks-in-a-column.html", "keywords": ["数据", "DuckDB", "SQL", "Parquet"], "image": ["https://duckdb.org/images/blog/thumbs/ducks-column.svg"]}, {"@type": "WebPage", "@id": "https://news.nofeetbird.tech/a/duckdb-ducks-in-a-column#page", "url": "https://news.nofeetbird.tech/a/duckdb-ducks-in-a-column", "name": "DuckDB 官方导览：列式存储下的一组 SQL 写法，从直接查文件到写好 Parquet · 新知", "description": "DuckDB 团队用一个 400 只鸭子的样例数据集，演示 EXCLUDE、COLUMNS()、GROUP BY ALL、QUALIFY、ASOF JOIN、分区写入和 EXPLAIN ANALYZE 等功能，共同点是只读查询需要的列和值。", "inLanguage": "zh-CN", "isPartOf": {"@id": "https://news.nofeetbird.tech/#website"}, "mainEntity": {"@id": "https://news.nofeetbird.tech/a/duckdb-ducks-in-a-column#article"}}]}</script>
+<link rel="alternate" type="application/rss+xml" title="新知" href="/feed.xml">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-7 -7 58 58'%3E%3Crect x='-7' y='-7' width='58' height='58' rx='5' fill='%231b1d18'/%3E%3Cpath fill='%23fffefa' d='M2 0h11l29 44H31zM32 0h10L26 18l-5-7zM17 26l5 7-10 11H2z'/%3E%3C/svg%3E">
+<script>try{var t=localStorage.getItem('xz.theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
+<style data-source="/static/app.b7cfdefd4a1d.css">/* D · 影像刊 — see DESIGN.md. System fonts, real media, no left rail. */
+:root {
+  color-scheme:light;
+  --paper:#fffefa; --ink:#1b1d18; --muted:#62685a; --rule:#d8dccf;
+  --surface:#eef0e5; --sage:#dce3cc; --sage-ink:#293026; --focus:#315b3c;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC","Noto Sans CJK SC",sans-serif;
+  --ease:cubic-bezier(.2,0,0,1); --gutter:32px; --reader-bar:64px;
+  --control-border:#808675; --image-outline:#0000001a;
+  --contrast-surface:#1b1d18; --contrast-ink:#fffefa;
+}
+:root[data-theme="dark"] {
+  color-scheme:dark;
+  --paper:#20241e; --ink:#eef0e7; --muted:#b7c1af; --rule:#4b5842;
+  --surface:#30392a; --sage:#394631; --sage-ink:#eef0e7; --focus:#c0d9aa;
+  --control-border:#89957f; --image-outline:#ffffff1a;
+  --contrast-surface:#12180f; --contrast-ink:#eef0e7;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-padding-top:130px;scrollbar-gutter:stable}
+body{margin:0;background:var(--paper);color:var(--ink);font:1rem/1.7 var(--sans);-webkit-font-smoothing:antialiased;letter-spacing:0}
+[hidden]{display:none!important}
+a{color:inherit;text-decoration:none}
+@media(hover:hover){a:hover{text-decoration:underline;text-underline-offset:.2em}}
+button{font:inherit;color:inherit;cursor:pointer}
+button:disabled{cursor:wait}
+button,a{-webkit-tap-highlight-color:transparent}
+
+:focus-visible{outline:3px solid var(--focus);outline-offset:4px}
+em,i{font-style:normal;font-weight:500}
+strong,b{font-weight:600}
+img{max-width:100%;height:auto}
+.sr-only,.skip:not(:focus){position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.skip:focus{position:fixed;z-index:100;top:8px;left:8px;background:var(--ink);color:var(--paper);padding:10px 16px}
+.site-header,.site-main,.site-footer{width:min(100% - var(--gutter)*2,1320px);margin-inline:auto}
+.site-header{min-height:118px;display:flex;align-items:center;justify-content:space-between;gap:24px 32px;flex-wrap:wrap;padding-block:24px;border-bottom:1px solid var(--ink)}
+.brand{display:flex;align-items:center;gap:26px;flex:none}
+.brand:hover{text-decoration:none}
+.brand-wordmark{display:flex;align-items:baseline;gap:7px;line-height:1}
+.brand-mark{width:43px;height:43px;align-self:center;margin-top:2px}
+.brand-name{font:700 3.875rem/.95 Georgia,"Times New Roman",serif;letter-spacing:-.065em}
+.brand-period{color:var(--focus)}
+.brand-sub{font-size:0.9375rem;font-weight:500;line-height:1.5;border-inline-start:1px solid var(--rule);padding-inline-start:25px;letter-spacing:.12em}
+.brand-sub>span{display:block;font-size:0.75rem;line-height:1.6;font-weight:400;letter-spacing:.04em;color:var(--muted);margin-top:5px}
+.header-side{display:flex;align-items:center;gap:30px}
+.site-nav{display:flex;align-items:center;gap:30px;font-size:0.875rem}
+.site-nav a{min-height:44px;display:flex;align-items:center;gap:6px;position:relative}
+.site-nav a[aria-current="page"]{font-weight:600}
+.site-nav a[aria-current="page"]::after{content:"";position:absolute;inset-inline:0;bottom:3px;height:2px;background:var(--ink)}
+.icon-button{width:44px;height:44px;border:1px solid var(--control-border);border-radius:50%;display:inline-grid;place-items:center;background:transparent;flex:none}
+.site-main{min-height:55vh;padding-bottom:44px}
+.edition-line{min-height:160px;display:flex;align-items:center;justify-content:space-between;gap:24px 32px;flex-wrap:wrap;padding-block:28px}
+.edition-line h1{font-size:1.875rem;line-height:1.4;font-weight:600;margin:8px 0 10px;text-wrap:balance}
+.edition-line p{font-size:0.875rem;line-height:1.7;color:var(--muted);margin:0}
+.edition-line .edition-kicker{font-size:0.6875rem;letter-spacing:.1em;color:var(--ink)}
+.edition-kicker span{margin-inline:8px;color:var(--muted)}
+.edition-meta{text-align:end;font-variant-numeric:tabular-nums;display:flex;flex-direction:column;gap:6px;flex:none}
+.edition-label{font-size:0.75rem;color:var(--muted)}
+.edition-meta time{font:400 1.5rem/1.25 Georgia,"Times New Roman",serif;letter-spacing:.02em}
+.edition-note{font-size:0.75rem;color:var(--muted)}
+/* A quiet editorial toolbar; every control remains labelled and keyboard accessible. */
+.discovery{margin-bottom:20px}
+.discovery-top,.discovery-bottom{display:flex;align-items:center;justify-content:space-between;gap:20px}
+.discovery-top{flex-wrap:wrap;padding-block:16px;border-block:1px solid var(--rule)}
+.filter-group{display:flex;gap:8px;flex-wrap:wrap}
+.filter-group button{min-height:44px;padding:8px 16px;display:flex;align-items:center;gap:9px;font-size:0.875rem;background:transparent;border:1px solid transparent;border-radius:3px}
+.filter-group button span{font-size:0.6875rem;font-variant-numeric:tabular-nums;opacity:.8}
+.filter-group button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.search-field{display:flex;align-items:center;gap:10px;width:min(340px,42%);min-height:44px;border:1px solid var(--control-border);border-radius:3px;padding-inline:13px 0;color:var(--muted)}
+.search-field svg{flex:none}
+.search-field input{font:400 0.875rem/1.5 var(--sans);color:var(--ink);background:transparent;border:0;min-width:0;width:100%;padding:11px 0;border-radius:0}
+.search-field input::-webkit-search-cancel-button{display:none}
+.search-field input::placeholder{color:var(--muted);opacity:1}
+.search-field:focus-within{outline:2px solid var(--focus);outline-offset:3px}
+.search-field input:focus-visible{outline:none}
+.search-field button{border:0;background:transparent;width:44px;min-height:44px;flex:none;font-size:1.375rem}
+.discovery-bottom{flex-wrap:wrap;padding-top:12px;min-height:54px}
+.discovery-bottom p{margin:0;font-size:0.75rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.view-switch{display:flex;gap:4px}
+.view-switch button{display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:6px 10px;border:1px solid transparent;border-radius:3px;background:transparent;color:var(--muted);font-size:0.75rem}
+.view-switch button[aria-pressed="true"]{color:var(--ink);background:var(--surface);border-color:var(--control-border)}
+.search-empty{padding:48px 20px 72px;text-align:center;border-top:1px solid var(--rule)}
+.empty-symbol{font:400 3rem/1 Georgia,serif;color:var(--muted);margin:0 0 20px}
+.search-empty h2{font-size:1.375rem;font-weight:500;margin:0 0 12px}
+.search-empty p{color:var(--muted);overflow-wrap:anywhere}
+.search-empty .reset-button{margin:12px 0 0}
+.news-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:28px 24px;align-items:stretch}
+.news-card{grid-column:span 4;min-width:0;display:flex;flex-direction:column;border:1px solid var(--rule);background:var(--paper);position:relative;overflow:hidden}
+.news-card.is-featured{grid-column:span 8}
+.news-card.is-wide{grid-column:span 8}
+.card-link{display:flex;flex-direction:column;height:100%;min-width:0}
+.card-link:hover{text-decoration:none}
+.cover{position:relative;overflow:hidden;background:var(--surface);min-height:0;aspect-ratio:16/9;isolation:isolate}
+.cover img{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:cover;z-index:1;transition:transform 180ms var(--ease)}
+.is-featured .cover{min-height:0;aspect-ratio:2.7;flex:none}
+.is-featured .card-body{flex:0 0 auto}
+.is-wide .cover{aspect-ratio:2/1}
+.cover-fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--surface);color:var(--ink);z-index:0;overflow:hidden}
+.cover-word{font-size:clamp(2.75rem,5.3vw,5.25rem);font-weight:500;line-height:1.1;overflow-wrap:anywhere;max-width:100%;text-align:left}
+.cover-badge{position:absolute;z-index:2;left:16px;bottom:16px;background:#1b1d18dc;color:#fffefa;padding:5px 10px;font-size:0.75rem;line-height:1.6;border:1px solid #fffefa60}
+.card-body{padding:22px 24px 20px;display:flex;flex-direction:column;gap:10px;flex:1}
+.card-meta{display:flex;overflow-wrap:anywhere;align-items:flex-start;justify-content:space-between;gap:14px;font-size:0.75rem;line-height:1.7;color:var(--muted);font-variant-numeric:tabular-nums}
+.card-meta time{white-space:nowrap;flex:none}
+.card-title{font-size:1.3125rem;font-weight:600;line-height:1.6;margin:0;text-wrap:pretty;overflow-wrap:anywhere}
+.is-featured .card-title{font-size:clamp(1.5625rem,2.2vw,2rem);line-height:1.5}
+.card-dek{font-size:0.875rem;line-height:1.85;color:var(--muted);margin:0;text-wrap:pretty}
+.card-end{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;font-size:0.75rem;color:var(--muted);margin-top:auto;padding-top:16px}
+.card-read{display:inline-flex;align-items:center;gap:10px;color:var(--ink);white-space:nowrap}
+.card--text.tone-ink .card-read{color:var(--contrast-ink)}
+.card-link:focus-visible{outline-offset:-4px}
+.tone-ink .card-link:focus-visible{outline-color:var(--contrast-ink)}
+.card-arrow{font-size:1.3125rem;line-height:1}
+.card--text .type-cover{min-height:140px;padding:24px 24px 16px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:20px;overflow:hidden}
+.type-index{font-size:0.625rem;letter-spacing:.12em;line-height:1.5;font-variant-numeric:tabular-nums}
+.type-dot{color:var(--focus)}
+.tone-ink .type-dot{color:var(--contrast-ink)}
+.card--text .cover-word{font:400 clamp(2.25rem,3.5vw,3.375rem)/1.15 Georgia,"Times New Roman",serif;letter-spacing:-.03em}
+.card--text .card-body{padding-top:12px}
+.card--text{align-self:stretch}
+.card--text.tone-ink{background:var(--contrast-surface);color:var(--contrast-ink);border-color:var(--contrast-surface)}
+.card--text.tone-ink .card-meta,.card--text.tone-ink .card-dek,.card--text.tone-ink .card-end{color:var(--contrast-ink);opacity:.85}
+.card--text.tone-sage{background:var(--sage);color:var(--sage-ink);border-color:var(--sage)}
+.card--text.tone-sage .card-meta,.card--text.tone-sage .card-dek,.card--text.tone-sage .card-end{color:var(--sage-ink)}
+.cover-error-link{display:none;font-size:0.875rem;padding:0 22px 18px;text-decoration:underline;text-underline-offset:.2em}
+.media-failed .cover-error-link{display:block}
+.media-failed .cover img{display:none}
+.empty-state{padding:64px 0;max-width:40rem}
+.empty-state h1{font-size:2rem;font-weight:500}
+.empty-state p{color:var(--muted)}
+.site-footer{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:20px 0 32px;border-top:1px solid var(--ink);font-size:0.875rem;color:var(--muted)}
+.footer-links{display:flex;gap:24px;align-items:center;flex-wrap:wrap}
+.footer-links a{display:inline-flex;align-items:center;min-height:44px}
+/* Shared standalone article and progressive full-screen reader. */
+.article-reader{max-width:960px;margin:0 auto;padding:30px 0 60px;min-width:0}
+.article-back{display:inline-flex;min-height:44px;align-items:center;gap:8px;font-size:0.875rem;color:var(--muted);margin-bottom:20px}
+.article-header{max-width:900px;margin:0 auto 24px}
+.article-kicker{font-size:0.875rem;color:var(--muted);margin:0 0 12px}
+.article-header h1{font-size:clamp(1.8125rem,3.8vw,3rem);line-height:1.42;font-weight:500;margin:0 0 18px;text-wrap:pretty;overflow-wrap:anywhere}
+.article-dek{font-size:1.125rem;line-height:1.85;color:var(--muted);margin:0 0 22px;max-width:42rem}
+.article-meta{display:flex;gap:8px 22px;flex-wrap:wrap;color:var(--muted);font-size:0.875rem;padding-top:14px;border-top:1px solid var(--rule);font-variant-numeric:tabular-nums}
+.reader-tabs{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;position:sticky;top:0;z-index:3;background:var(--paper);border-block:1px solid var(--rule);padding:8px 0;margin:0 auto 30px;max-width:900px}
+.reader-tabs [data-tabs]{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.reader-tabs a{display:inline-flex;align-items:center;min-height:44px;padding:6px 14px;font-size:0.875rem;border:1px solid transparent;border-radius:3px;white-space:nowrap}
+.reader-tabs a[aria-selected="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.reader-source{margin-left:auto;font-size:0.875rem!important}
+.reader-panel{max-width:42rem;margin:0 auto 44px;scroll-margin-top:130px}
+.section-heading{font-size:1.25rem;font-weight:500;margin:0 0 20px}
+.reader-enhanced .section-heading{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);margin:0;padding:0}
+.original-title{font-size:1.1875rem;line-height:1.7;margin:0 0 22px;font-weight:500;overflow-wrap:anywhere}
+.completeness-note{font-size:0.875rem;line-height:1.85;color:var(--muted);background:var(--surface);border:1px solid var(--rule);padding:12px 16px;margin:0 0 24px}
+.prose{min-width:0;font-size:1.125rem;line-height:1.95;overflow-wrap:anywhere;text-wrap:pretty}
+.prose pre{max-width:100%;overflow-x:auto;margin:1.5em 0;padding:1rem;border:1px solid var(--rule);background:var(--surface);font-size:.875rem;line-height:1.65;tab-size:4;white-space:pre;overflow-wrap:normal;text-wrap:initial}
+.prose pre code{display:block;width:max-content;min-width:100%;padding:0;border:0;border-radius:0;background:none;font-size:inherit;line-height:inherit;white-space:pre;overflow-wrap:normal}
+/* Keep wide source tables inside the reading column without compressing every cell. */
+.prose table{display:block;width:fit-content;max-width:100%;overflow-x:auto;border-collapse:collapse;margin:1.5em 0;font-size:.9375rem;line-height:1.65;tab-size:4;text-wrap:wrap;font-variant-numeric:tabular-nums}
+.prose th,.prose td{padding:.7em .85em;border:1px solid var(--rule);text-align:left;vertical-align:top;min-width:5.5rem;max-width:24rem}
+.prose :is(th,td):first-child{min-width:7.5rem}
+.prose th{font-weight:600;background:var(--surface)}
+.prose :is(th,td)[align="left"]{text-align:left}
+.prose :is(th,td)[align="center"]{text-align:center}
+.prose :is(th,td)[align="right"]{text-align:right}
+.prose tbody tr:nth-child(even){background:color-mix(in srgb,var(--surface) 45%,transparent)}
+.prose caption{text-align:left;font-size:.875rem;line-height:1.6;color:var(--muted);padding-bottom:.65em}
+.prose img{max-width:100%;height:auto;vertical-align:middle}
+.prose p,.prose li{font-size:inherit;line-height:inherit;margin:0 0 1em}
+.prose :is(th,td) :is(p,li){font-size:inherit;line-height:inherit}
+.prose :is(th,td)>:last-child{margin-bottom:0}
+.prose h1,.prose h2,.prose h3{font-size:1.5625rem;font-weight:500;line-height:1.6;margin:1.8em 0 .7em}
+.prose h4,.prose h5,.prose h6{font-size:1.125rem;font-weight:600;line-height:1.65;margin:1.6em 0 .6em}
+.prose ul,.prose ol{padding-left:1.4em;margin:0 0 1.2em}
+.prose li{margin-bottom:.45em}
+.prose li>:is(ul,ol){margin:.45em 0 .6em}
+.prose li>p{margin-bottom:.6em}
+.prose li>:last-child{margin-bottom:0}
+.prose blockquote{margin:1.5em 0;padding:18px 22px;border:1px solid var(--rule);background:var(--surface)}
+.prose blockquote>:first-child{margin-top:0}
+.prose blockquote>:last-child{margin-bottom:0}
+.prose blockquote blockquote{margin:1em 0}
+.prose a{font-weight:500;text-decoration:underline;text-underline-offset:.22em}
+.prose hr{border:0;border-top:1px solid var(--rule);margin:2em 0}
+.prose code{font-family:ui-monospace,monospace;font-size:.9em;background:var(--surface);padding:2px 4px;border-radius:3px;white-space:break-spaces}
+.prose details{margin:1.3em 0;padding:.8em 1em;border:1px solid var(--rule)}
+.prose summary{cursor:pointer;font-weight:600;line-height:1.6}
+.prose details[open]>summary{margin-bottom:.8em}
+.prose details>:last-child{margin-bottom:0}
+.prose kbd{font-family:ui-monospace,monospace;font-size:.85em;padding:.1em .35em;border:1px solid var(--rule);border-bottom-width:2px;border-radius:3px;background:var(--surface)}
+.prose sup,.prose sub{font-size:.75em;line-height:0;position:relative;vertical-align:baseline}
+.prose sup{top:-.5em}.prose sub{bottom:-.2em}
+.original-media{display:grid;gap:24px;margin:24px 0 28px}
+.media-figure{margin:0;min-width:0}
+.media-frame{background:var(--surface);border:1px solid var(--rule);overflow:hidden}
+.media-frame img,.media-frame video{max-width:100%;height:auto;max-height:80dvh;display:block;margin:auto}
+.media-frame audio{display:block;width:100%;min-height:54px}
+.media-frame .yt{position:relative;aspect-ratio:16/9}
+.media-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#1b1d18}
+.media-figure figcaption{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px 18px;font-size:0.875rem;line-height:1.8;color:var(--muted);padding-top:8px}
+.media-figure figcaption a{text-decoration:underline;text-underline-offset:.2em}
+.media-error{font-size:0.875rem;color:var(--muted);margin:0;padding:18px}
+.source-box{max-width:42rem;margin:24px auto 0;border-top:1px solid var(--rule);padding-top:22px;font-size:0.875rem;color:var(--muted);overflow-wrap:anywhere}
+.source-box a{display:inline-flex;align-items:center;min-height:44px;text-decoration:underline;color:var(--ink);margin-right:22px}
+.reader-sheet{position:fixed;inset:0;margin:0;padding:0;width:100%;max-width:none;height:100dvh;max-height:none;border:0;background:var(--paper);color:var(--ink);overflow:hidden}
+.reader-sheet::backdrop{background:#1b1d1870}
+.reader-sheet[open]{display:flex;flex-direction:column}
+.reader-sheet.sheet-fallback{z-index:60}
+.sheet-bar{min-height:var(--reader-bar);display:flex;flex-shrink:0;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;padding:0 var(--gutter);border-bottom:1px solid var(--rule);background:var(--paper)}
+.sheet-close{min-height:44px;display:inline-flex;align-items:center;gap:12px;border:0;background:none;padding:6px 0;font-size:0.875rem}
+.sheet-close span{font-size:1.375rem}
+.sheet-brand{font-size:0.875rem;font-weight:500}
+.sheet-bar a{font-size:0.875rem;color:var(--muted);min-height:44px;display:flex;align-items:center}
+.sheet-scroll{height:calc(100dvh - var(--reader-bar));flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;scroll-padding-top:130px;padding:0 var(--gutter)}
+.sheet-scroll .article-back{display:none}
+.sheet-scroll .article-reader{padding-top:35px}
+.sheet-scroll .reader-tabs{top:0}
+.sheet-status{max-width:44rem;margin:52px auto;min-width:0}
+.sheet-status h2{font-size:1.6875rem;line-height:1.5;font-weight:500;margin:0 0 18px}
+.sheet-status p{font-size:1rem;line-height:1.9;color:var(--muted)}
+.sheet-status a{display:inline-flex;align-items:center;min-height:44px;margin-right:18px;text-decoration:underline;text-underline-offset:.2em}
+.retry-button,.reset-button{display:inline-flex;align-items:center;min-height:44px;padding:8px 18px;border:1px solid var(--ink);background:var(--ink);color:var(--paper);border-radius:3px;margin-right:18px}
+.skeleton-title{width:85%;height:38px;background:var(--surface);margin-bottom:14px}
+.skeleton-title.short{width:60%}
+.skeleton-line{height:16px;background:var(--surface);margin-top:20px}
+.skeleton-line.short{width:72%}
+body.sheet-open{overflow:hidden}
+.about-copy{max-width:42rem;margin:52px auto 72px}
+.about-copy h1{font-size:2.375rem;font-weight:500;line-height:1.4;margin:0 0 30px}
+/* Filtered results have equal weight; the opening spread remains asymmetric. */
+.news-grid.is-filtered .is-featured{grid-column:span 4}
+.news-grid.is-filtered .is-featured .cover{aspect-ratio:16/9}
+.news-grid.is-filtered .is-featured .card-title{font-size:1.3125rem}
+.news-grid[data-layout="list"]{display:flex;flex-direction:column;gap:0;border-top:1px solid var(--rule)}
+.news-grid[data-layout="list"] .news-card{background:transparent;color:var(--ink);border:0;border-bottom:1px solid var(--rule);overflow:visible}
+.news-grid[data-layout="list"] .card-link{display:flex;flex-direction:row;gap:28px;padding:26px 0;align-items:center}
+.news-grid[data-layout="list"] .cover,.news-grid[data-layout="list"] .type-cover{display:none}
+.news-grid[data-layout="list"] .card-body{padding:0;gap:8px;flex:1;min-width:0}
+.news-grid[data-layout="list"] .card-title{font-size:1.3125rem;line-height:1.6}
+.news-grid[data-layout="list"] .card-meta,.news-grid[data-layout="list"] .card-dek,.news-grid[data-layout="list"] .card-end{color:var(--muted);opacity:1}
+.news-grid[data-layout="list"] .card-read{color:var(--ink)}
+.news-grid[data-layout="list"] .card-end{padding-top:2px}
+.news-grid[data-layout="list"] .card-link:focus-visible{outline-color:var(--focus);outline-offset:5px}
+.reading-position{display:flex;align-items:center;gap:12px;flex-basis:100%;color:var(--muted);font-size:0.6875rem;line-height:1.3}
+.reading-position span{min-width:4ch;text-align:end;font-variant-numeric:tabular-nums}
+.reading-position progress{appearance:none;display:block;width:100%;height:2px;border:0;background:var(--rule);color:var(--focus)}
+.reading-position progress::-webkit-progress-bar{background:var(--rule)}
+.reading-position progress::-webkit-progress-value{background:var(--focus)}
+.reading-position progress::-moz-progress-bar{background:var(--focus)}
+.cover img,.media-frame img{outline:1px solid var(--image-outline);outline-offset:-1px}
+@media(hover:hover){
+ .news-card:has(.card-link:hover){border-color:var(--muted)}
+ .card-link:hover .card-read{text-decoration:underline;text-underline-offset:4px}
+ .icon-button:hover,.filter-group button[aria-pressed="false"]:hover,.view-switch button[aria-pressed="false"]:hover{background:var(--surface)}
+ .site-nav a:hover{text-decoration:none;color:var(--focus)}
+}
+@media(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){
+ .card-link:hover .cover img{transform:scale(1.025)}
+}
+@media(prefers-reduced-motion:no-preference){
+ .icon-button,.retry-button,.reset-button{transition:scale 150ms ease-out}
+ .icon-button:not(:disabled):active,.retry-button:not(:disabled):active,.reset-button:not(:disabled):active{scale:.96}
+}
+@media(max-width:1050px){
+ .brand-sub{display:none}
+ .news-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+ .news-card,.news-card.is-wide,.news-grid.is-filtered .is-featured{grid-column:span 1}
+ .news-card.is-featured{grid-column:span 1}
+ .is-featured .cover{aspect-ratio:16/9}
+ .is-featured .card-title{font-size:1.4375rem}
+ .edition-line h1{font-size:1.6875rem}
+}
+@media(max-width:680px){
+ :root{--gutter:20px;--reader-bar:58px}
+ .site-header{min-height:0;gap:22px;flex-wrap:wrap;padding:26px 0 15px}
+ .brand{gap:16px}
+ .brand-wordmark{gap:5px}
+ .brand-name{font-size:3.25rem}
+ .brand-mark{width:35px;height:35px}
+ .brand-sub{display:block;padding-inline-start:16px;font-size:0.8125rem}
+ .brand-sub>span{font-size:0.6875rem}
+ .header-side{width:100%;justify-content:space-between;gap:16px}
+ .site-nav{gap:28px;flex-wrap:wrap;font-size:0.8125rem}
+ .icon-button{width:40px;height:40px}
+ .edition-line{min-height:0;gap:16px;padding-block:22px}
+ .edition-line h1{font-size:1.5625rem;margin-top:10px}
+ .edition-line .edition-description{font-size:0.8125rem;max-width:24em;line-height:1.8}
+ .edition-meta{display:none}
+ .edition-line .edition-kicker{font-size:0.625rem}
+ .discovery-top{flex-wrap:wrap;gap:16px;padding-block:14px 16px}
+ .filter-group{gap:4px}
+ .filter-group button{padding-inline:13px;font-size:0.8125rem}
+ .search-field{width:100%}
+ .search-field input{font-size:1rem}
+ .discovery-bottom{gap:8px;align-items:center}
+ .discovery-bottom p{font-size:0.6875rem}
+ .view-switch button{font-size:0.6875rem;padding-inline:8px;gap:5px}
+ .view-switch svg{width:13px;height:13px}
+ .news-grid{grid-template-columns:minmax(0,1fr);gap:22px}
+ .news-card,.news-card.is-wide,.news-card.is-featured,.news-grid.is-filtered .is-featured{grid-column:auto;grid-row:auto}
+ .cover,.is-featured .cover,.is-wide .cover{aspect-ratio:16/9;min-height:0;flex:none}
+ .card-body{padding:20px;gap:12px}
+ .card-title,.is-featured .card-title,.news-grid.is-filtered .is-featured .card-title{font-size:1.375rem;line-height:1.6}
+ .card-dek{font-size:0.875rem}
+ .card-meta{font-size:0.75rem}
+ .card--text .type-cover{min-height:130px;padding:22px 20px 12px}
+ .card--text .cover-word{font-size:2.875rem}
+ .card-end{padding-top:12px}
+ .news-grid[data-layout="list"] .card-link{gap:16px;padding:22px 0;align-items:flex-start}
+ .news-grid[data-layout="list"] .cover,.news-grid[data-layout="list"] .type-cover{display:none}
+ .news-grid[data-layout="list"] .card-title{font-size:1.1875rem}
+ .site-main{padding-bottom:36px}
+ .site-footer{align-items:flex-start;flex-direction:column;gap:12px;padding-top:22px;font-size:0.75rem}
+ .footer-links{gap:26px}
+ .article-reader{padding-top:23px}
+ .article-back{margin-bottom:16px}
+ .article-header h1{font-size:1.8125rem;line-height:1.5}
+ .article-dek{font-size:1rem;line-height:1.9}
+ .reader-tabs{gap:4px;margin-bottom:24px;padding:7px 0}
+ .reader-tabs a{font-size:0.875rem;padding:6px 10px}
+ .reader-tabs .reader-source{font-size:0.8125rem!important;padding-inline-end:0}
+ .reader-panel{margin-bottom:28px}
+ .prose{font-size:1.0625rem;line-height:1.95}
+ .prose h1,.prose h2,.prose h3{font-size:1.4375rem;line-height:1.6}
+ .prose blockquote{padding:15px}
+ .sheet-bar{gap:10px}
+ .sheet-bar a{font-size:0.8125rem}
+ .sheet-brand{font-size:0.75rem}
+ .sheet-scroll .article-reader{padding-top:25px}
+ .sheet-status{margin-top:32px}
+ .about-copy{margin-top:32px}
+}
+@media(max-width:360px){
+ :root{--gutter:16px}
+ .brand-sub>span{font-size:0.6875rem;max-width:6em}
+ .site-nav{gap:22px}
+ .sheet-brand{display:none}
+ .reader-tabs a{padding-inline:8px;font-size:0.8125rem}
+}
+@media(prefers-reduced-motion:reduce){
+ *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
+}
+@media print{
+ .site-header,.site-footer,.reader-tabs,.article-back,.sheet-bar{display:none!important}
+ .reader-panel[hidden]{display:block!important}
+ .site-main,.article-reader{width:100%;max-width:none}
+ .reader-sheet[open]{position:static;height:auto;overflow:visible}
+ .sheet-scroll{height:auto;overflow:visible;padding:0}
+}
+
+/* Source media remains part of the Chinese reading flow, not just the original tab. */
+.rewrite-source-media{margin:28px 0}
+.prose .source-media-heading{font-size:1.25rem;line-height:1.6;margin:0 0 12px}
+.prose .rewrite-source-media .completeness-note{font-size:0.875rem;line-height:1.8}
+.prose .media-error{font-size:0.875rem;line-height:1.8;margin:0}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<header class="site-header">
+  <a class="brand" href="/" aria-label="新知首页"><span class="brand-wordmark" aria-hidden="true"><svg class="brand-mark" viewBox="0 0 44 44" fill="currentColor"><circle cx="22" cy="22" r="20" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="22" cy="22" r="7"/></svg><span class="brand-name">新知<span class="brand-period">.</span></span></span><span class="brand-sub">AI · Web3 · 数据<span>英文一手 · 中文改写</span></span></a>
+  <div class="header-side"><nav class="site-nav" aria-label="主导航"><a href="/">精选</a><a class="archive-nav" href="/archive">往期</a><a href="/feed.xml" aria-label="订阅全文 RSS">订阅 RSS <span aria-hidden="true">↗</span></a></nav><button type="button" class="icon-button" id="theme-btn" aria-label="切换为暗色主题" aria-pressed="false"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"/></svg></button></div>
+</header>
+<main class="site-main" id="main">
+<article class="article-reader" data-article-id="duckdb-ducks-in-a-column">
+<a class="article-back" href="/">← 返回选刊</a>
+<header class="article-header"><p class="article-kicker">The DuckDB team / 文章</p><h1>DuckDB 官方导览：列式存储下的一组 SQL 写法，从直接查文件到写好 Parquet</h1><p class="article-dek">DuckDB 团队用一个 400 只鸭子的样例数据集，演示 EXCLUDE、COLUMNS()、GROUP BY ALL、QUALIFY、ASOF JOIN、分区写入和 EXPLAIN ANALYZE 等功能，共同点是只读查询需要的列和值。</p><div class="article-meta"><time datetime="2026-11-11">本站收录 2026年11月11日 · 周三</time><span>原文发布 2026年11月10日 · 周二</span><span>原作者：The DuckDB team</span><span>中文改写：<a href="/about">新知</a></span><span>数据 · DuckDB · SQL · Parquet</span></div></header>
+<nav class="reader-tabs" aria-label="文章版本与来源"><div data-tabs><a href="#rewrite" id="tab-rewrite" data-view="rewrite">中文改写</a><a href="#original" id="tab-original" data-view="original">原文</a></div><a class="reader-source" href="https://duckdb.org/2026/11/10/ducks-in-a-column.html" target="_blank" rel="noopener noreferrer">原文链接 ↗</a><div class="reading-position" hidden><progress max="100" value="0" aria-label="当前版本阅读进度"></progress><span data-reading-percent aria-hidden="true">0%</span></div></nav>
+<section class="reader-panel" id="rewrite" data-reader-panel="rewrite" aria-label="中文改写"><h2 class="section-heading">中文改写</h2><div class="prose"><p>DuckDB 团队在官方博客上发了一篇功能导览，主线只有一条：DuckDB 按列存储数据，所以一个查询只读取它点名的那些列。文章围绕这一设计，依次介绍了直接查询文件、列级 SQL、聚合快捷写法、窗口函数、ASOF 连接，以及如何写出组织良好的 Parquet 文件。</p>
+<h2>为什么按列存</h2>
+<p>DuckDB 把每一列单独存放，而不是把每一行存成一条记录。一张 50 列的表，查询只用到其中 3 列，就只读这 3 列。</p>
+<p>DuckDB 的许多性能特性都来自这个设计。列式存储<a href="https://duckdb.org/2022/10/28/lightweight-compression.html" rel="noopener noreferrer">压缩效果好</a>，因为一列里的值类型相同，而且经常重复。执行引擎以每批 2048 个值的向量来处理每一列。查询要的列越少，要做的工作就越少。</p>
+<p>文中示例用的是一个 400 只鸭子的样本数据集：每只鸭子腿上套着带编号的脚环，在 2025 年 10 月到 2026 年 4 月之间出现在四个池塘之一。<code>sightings</code> 表有五列：<code>ring_id</code>、<code>pond</code>、<code>species</code>、<code>weight_g</code> 和 <code>seen_at</code>。</p>
+<pre><code>SELECT * FROM sightings LIMIT 3;
+</code></pre>
+<pre><code>┌─────────┬───────┬─────────┬──────────┬─────────────────────┐
+│ ring_id │ pond  │ species │ weight_g │       seen_at       │
+├─────────┼───────┼─────────┼──────────┼─────────────────────┤
+│ R0001   │ south │ wigeon  │ 862      │ 2025-11-06 12:18:38 │
+│ R0002   │ south │ wigeon  │ 578      │ 2025-12-04 00:12:54 │
+│ R0003   │ south │ wigeon  │ 734      │ 2026-01-06 16:50:41 │
+└─────────┴───────┴─────────┴──────────┴─────────────────────┘
+</code></pre>
+<p>所有示例都可以在 DuckDB 命令行里运行，也可以在 Python 中用 <code>duckdb.sql(...)</code> 运行。</p>
+<pre><code>pip install duckdb                        # Python
+curl https://install.duckdb.org | bash    # CLI
+</code></pre>
+<h2>不导入，直接查询文件</h2>
+<p>查询之前不需要先导入数据。DuckDB 把文件路径当作一张表，并从文件中推断列名和类型。</p>
+<pre><code>SELECT * FROM 'ponds.csv';
+</code></pre>
+<pre><code>┌─────────┬───────┬─────────┐
+│ pond_id │ pond  │ area_m2 │
+├─────────┼───────┼─────────┤
+│ 0007    │ north │ 4200    │
+│ 0042    │ south │ 1800    │
+│ 0113    │ mill  │ 950     │
+│ 0256    │ reed  │ 3100    │
+└─────────┴───────┴─────────┘
+</code></pre>
+<p>用通配符可以查询一整个文件夹的 Parquet 文件。加上 <code>filename = true</code>，DuckDB 会把文件名作为一列加进结果：</p>
+<pre><code>SELECT filename, count(*) AS sightings
+FROM read_parquet('sightings/*.parquet', filename = true)
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌────────────────────────┬───────────┐
+│        filename        │ sightings │
+├────────────────────────┼───────────┤
+│ sightings/2025.parquet │ 184       │
+│ sightings/2026.parquet │ 216       │
+└────────────────────────┴───────────┘
+</code></pre>
+<p>DuckDB 也能通过 <a href="https://duckdb.org/docs/2.0/core_extensions/httpfs/https.html" rel="noopener noreferrer">HTTPS</a> 或 <a href="https://duckdb.org/docs/2.0/core_extensions/httpfs/s3api.html" rel="noopener noreferrer">S3</a> 读取远程文件。使用这类路径时，<a href="https://duckdb.org/docs/2.0/core_extensions/httpfs/overview.html" rel="noopener noreferrer">httpfs 扩展</a>会自动加载：</p>
+<pre><code>SELECT * FROM 's3://wetlands/2026/*.parquet';
+</code></pre>
+<p><a href="https://duckdb.org/docs/2.0/data/parquet/overview.html" rel="noopener noreferrer">Parquet 文件格式</a>同样按列存储数据，DuckDB 只读取查询点名的列。Parquet 还为每个行组（row group）保存最小值和最大值统计，所以当统计值表明某个行组不可能满足过滤条件时，DuckDB 可以直接跳过它（即 <a href="https://duckdb.org/docs/2.0/guides/performance/indexing.html#zonemaps" rel="noopener noreferrer">zonemap</a>）。</p>
+<pre><code>SELECT species, count(*) AS sightings
+FROM 'sightings/*.parquet'
+WHERE seen_at &gt;= DATE '2026-01-01'
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌─────────┬───────────┐
+│ species │ sightings │
+├─────────┼───────────┤
+│ mallard │ 89        │
+│ pintail │ 29        │
+│ teal    │ 37        │
+│ tufted  │ 29        │
+│ wigeon  │ 32        │
+└─────────┴───────────┘
+</code></pre>
+<p><strong>小贴士：检查类型嗅探器的判断。</strong> 如果 CSV 加载后类型出乎意料，可以先问 DuckDB 它猜的是什么，再把需要的类型固定下来。</p>
+<pre><code>DESCRIBE SELECT * FROM 'ponds.csv';
+</code></pre>
+<pre><code>┌─────────────┬─────────────┬──────┬──────┬─────────┬───────┐
+│ column_name │ column_type │ null │ key  │ default │ extra │
+├─────────────┼─────────────┼──────┼──────┼─────────┼───────┤
+│ pond_id     │ VARCHAR     │ YES  │ NULL │ NULL    │ NULL  │
+│ pond        │ VARCHAR     │ YES  │ NULL │ NULL    │ NULL  │
+│ area_m2     │ BIGINT      │ YES  │ NULL │ NULL    │ NULL  │
+└─────────────┴─────────────┴──────┴──────┴─────────┴───────┘
+</code></pre>
+<p>嗅探器把 <code>pond_id</code> 保留为文本，所以前导零得以保留。要覆盖它的判断，可以显式传入类型：</p>
+<pre><code>SELECT * FROM read_csv('ponds.csv', types = {'area_m2': 'DOUBLE'});
+</code></pre>
+<p><strong>小贴士：Hive 分区会变成列。</strong> 像 <code>year=2026/pond=north/</code> 这样的路径会变成 <code>year</code> 和 <code>pond</code> 两列，对这两列的过滤可以整文件夹跳过。后面“把列写好”一节会生成这种目录结构。</p>
+<pre><code>SELECT count(*)
+FROM read_parquet('lake/*/*/*.parquet', hive_partitioning = true)
+WHERE year = 2026 AND pond = 'north';
+</code></pre>
+<pre><code>┌──────────────┐
+│ count_star() │
+├──────────────┤
+│ 58           │
+└──────────────┘
+</code></pre>
+<h2>列级 SQL：批量选择、排除和改写列</h2>
+<p>DuckDB 的<a href="https://duckdb.org/docs/2.0/sql/dialect/friendly_sql.html" rel="noopener noreferrer">友好 SQL</a> 允许批量选择、排除和转换列。表很宽时，这能少打很多字，查询也更易读。</p>
+<p><strong>用 <code>EXCLUDE</code> 去掉某些列，用 <code>REPLACE</code> 原地改写某些列。</strong></p>
+<pre><code>SELECT * EXCLUDE (ring_id) FROM sightings LIMIT 3;
+</code></pre>
+<pre><code>┌───────┬─────────┬──────────┬─────────────────────┐
+│ pond  │ species │ weight_g │       seen_at       │
+├───────┼─────────┼──────────┼─────────────────────┤
+│ south │ wigeon  │ 862      │ 2025-11-06 12:18:38 │
+│ south │ wigeon  │ 578      │ 2025-12-04 00:12:54 │
+│ south │ wigeon  │ 734      │ 2026-01-06 16:50:41 │
+└───────┴─────────┴──────────┴─────────────────────┘
+</code></pre>
+<pre><code>SELECT * REPLACE (upper(species) AS species) FROM sightings LIMIT 3;
+</code></pre>
+<pre><code>┌─────────┬───────┬─────────┬──────────┬─────────────────────┐
+│ ring_id │ pond  │ species │ weight_g │       seen_at       │
+├─────────┼───────┼─────────┼──────────┼─────────────────────┤
+│ R0001   │ south │ WIGEON  │ 862      │ 2025-11-06 12:18:38 │
+│ R0002   │ south │ WIGEON  │ 578      │ 2025-12-04 00:12:54 │
+│ R0003   │ south │ WIGEON  │ 734      │ 2026-01-06 16:50:41 │
+└─────────┴───────┴─────────┴──────────┴─────────────────────┘
+</code></pre>
+<p><strong>用 <code>COLUMNS()</code> 按模式选列。</strong> 它接受正则表达式、列名列表或 lambda，并把同一个表达式应用到每个匹配的列上。<code>pond_readings</code> 表有三列温度，下面的查询返回每一列的最高读数：</p>
+<pre><code>SELECT max(COLUMNS('^temp_')) FROM pond_readings;
+</code></pre>
+<pre><code>┌────────────────┬─────────────┬────────────────┐
+│ temp_morning_c │ temp_noon_c │ temp_evening_c │
+├────────────────┼─────────────┼────────────────┤
+│ 8.0            │ 13.7        │ 8.3            │
+└────────────────┴─────────────┴────────────────┘
+</code></pre>
+<p>同样的写法也能处理缺失值。下面的查询把所有以 <code>_count</code> 结尾的列中的 <code>NULL</code> 替换为 <code>0</code>：</p>
+<pre><code>SELECT coalesce(COLUMNS(lambda c: c LIKE '%_count'), 0)
+FROM counts;
+</code></pre>
+<pre><code>┌───────────────┬────────────┬──────────────┐
+│ mallard_count │ teal_count │ wigeon_count │
+├───────────────┼────────────┼──────────────┤
+│ 12            │ 0          │ 3            │
+│ 0             │ 4          │ 1            │
+│ 7             │ 2          │ 0            │
+│ 0             │ 0          │ 5            │
+└───────────────┴────────────┴──────────────┘
+</code></pre>
+<p>选择匹配列时还可以顺便重命名。在替换名中，<code>\1</code> 表示第一个捕获组：</p>
+<pre><code>SELECT COLUMNS('temp_(.*)_c') AS '\1_celsius'
+FROM pond_readings
+LIMIT 3;
+</code></pre>
+<pre><code>┌─────────────────┬──────────────┬─────────────────┐
+│ morning_celsius │ noon_celsius │ evening_celsius │
+├─────────────────┼──────────────┼─────────────────┤
+│ 6.3             │ 9.1          │ 8.0             │
+│ 6.9             │ 10.7         │ 6.6             │
+│ 7.8             │ 8.8          │ 7.9             │
+└─────────────────┴──────────────┴─────────────────┘
+</code></pre>
+<p><strong>以 <code>FROM</code> 开头。</strong> 可以先写表名、省略 <code>SELECT</code>。单独一句 <code>FROM sightings;</code> 等同于 <code>SELECT * FROM sightings;</code>。</p>
+<pre><code>FROM sightings SELECT species, pond LIMIT 3;
+</code></pre>
+<pre><code>┌─────────┬───────┐
+│ species │ pond  │
+├─────────┼───────┤
+│ wigeon  │ south │
+│ wigeon  │ south │
+│ wigeon  │ south │
+└─────────┴───────┘
+</code></pre>
+<p><strong>把多列打包成 <code>STRUCT</code>。</strong> struct 是一个带命名字段的单列。用 <code>.*</code> 解包，可以把它的字段重新变回顶层列：</p>
+<pre><code>SELECT sighting.* FROM (
+    SELECT {'species': species, 'pond': pond} AS sighting FROM sightings
+)
+LIMIT 3;
+</code></pre>
+<pre><code>┌─────────┬───────┐
+│ species │ pond  │
+├─────────┼───────┤
+│ wigeon  │ south │
+│ wigeon  │ south │
+│ wigeon  │ south │
+└─────────┴───────┘
+</code></pre>
+<p><strong>小贴士：让 DuckDB 给列做画像。</strong> <code>SUMMARIZE</code> 为每一列返回一行，包括类型、最小值、最大值、近似去重计数、空值百分比和四分位数。</p>
+<pre><code>SUMMARIZE sightings;
+SUMMARIZE SELECT * FROM 'sightings/*.parquet';
+</code></pre>
+<h2>聚合的快捷写法</h2>
+<p>聚合天然受益于列式存储，因为对一列求和只需要扫描这一列的值。DuckDB 还加了一些语法，让 SQL 和要做的事一样简短。</p>
+<p><strong><a href="https://duckdb.org/docs/2.0/sql/query_syntax/groupby.html#group-by-all" rel="noopener noreferrer"><code>GROUP BY ALL</code></a> 按 <code>SELECT</code> 子句里所有非聚合列分组，不必把列名再写一遍。</strong></p>
+<pre><code>SELECT pond, species, count(*) AS sightings, round(avg(weight_g)) AS avg_weight_g
+FROM sightings
+GROUP BY ALL
+ORDER BY ALL
+LIMIT 5;
+</code></pre>
+<pre><code>┌──────┬─────────┬───────────┬──────────────┐
+│ pond │ species │ sightings │ avg_weight_g │
+├──────┼─────────┼───────────┼──────────────┤
+│ mill │ mallard │ 46        │ 1110.0       │
+│ mill │ pintail │ 11        │ 910.0        │
+│ mill │ teal    │ 15        │ 352.0        │
+│ mill │ tufted  │ 10        │ 879.0        │
+│ mill │ wigeon  │ 14        │ 720.0        │
+└──────┴─────────┴───────────┴──────────────┘
+</code></pre>
+<p><strong><code>FILTER</code> 可以一次扫描就统计多个类别，</strong> 不用每个类别各跑一个查询：</p>
+<pre><code>SELECT
+    pond,
+    count(*) FILTER (WHERE species = 'mallard') AS mallards,
+    count(*) FILTER (WHERE species = 'teal')    AS teals,
+    count(*) FILTER (WHERE weight_g &gt; 1200)     AS heavyweights
+FROM sightings
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌───────┬──────────┬───────┬──────────────┐
+│ pond  │ mallards │ teals │ heavyweights │
+├───────┼──────────┼───────┼──────────────┤
+│ mill  │ 46       │ 15    │ 16           │
+│ north │ 48       │ 17    │ 12           │
+│ reed  │ 26       │ 14    │ 6            │
+│ south │ 48       │ 19    │ 16           │
+└───────┴──────────┴───────┴──────────────┘
+</code></pre>
+<p><strong><code>arg_max</code> 返回另一列取最大值的那一行中的某个值，</strong> 不需要自连接。下面找出每个池塘里最重那只鸟的种类：</p>
+<pre><code>SELECT pond,
+       arg_max(species, weight_g) AS heaviest_species,
+       max(weight_g) AS max_weight_g
+FROM sightings
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌───────┬──────────────────┬──────────────┐
+│ pond  │ heaviest_species │ max_weight_g │
+├───────┼──────────────────┼──────────────┤
+│ mill  │ mallard          │ 1358         │
+│ north │ mallard          │ 1359         │
+│ reed  │ mallard          │ 1312         │
+│ south │ mallard          │ 1357         │
+└───────┴──────────────────┴──────────────┘
+</code></pre>
+<p><strong><code>PIVOT</code> 和 <code>UNPIVOT</code> 在行和列之间来回转换。</strong> <code>PIVOT</code> 为每个不同的值生成一列，这里是每个物种一列：</p>
+<pre><code>PIVOT sightings ON species USING count(*) GROUP BY pond ORDER BY pond;
+</code></pre>
+<pre><code>┌───────┬─────────┬─────────┬──────┬────────┬────────┐
+│ pond  │ mallard │ pintail │ teal │ tufted │ wigeon │
+├───────┼─────────┼─────────┼──────┼────────┼────────┤
+│ mill  │ 46      │ 11      │ 15   │ 10     │ 14     │
+│ north │ 48      │ 19      │ 17   │ 16     │ 17     │
+│ reed  │ 26      │ 11      │ 14   │ 13     │ 16     │
+│ south │ 48      │ 11      │ 19   │ 14     │ 15     │
+└───────┴─────────┴─────────┴──────┴────────┴────────┘
+</code></pre>
+<p><code>UNPIVOT</code> 方向相反。<code>monthly_counts</code> 表每个月一列，下面的查询把这些列转回行：</p>
+<pre><code>SELECT * FROM (
+    UNPIVOT monthly_counts
+    ON COLUMNS(* EXCLUDE pond)
+    INTO NAME month VALUE sightings
+)
+WHERE pond = 'north';
+</code></pre>
+<pre><code>┌───────┬───────┬───────────┐
+│ pond  │ month │ sightings │
+├───────┼───────┼───────────┤
+│ north │ Apr   │ 6         │
+│ north │ Dec   │ 18        │
+│ north │ Feb   │ 14        │
+│ north │ Jan   │ 21        │
+│ north │ Mar   │ 17        │
+│ north │ Nov   │ 20        │
+│ north │ Oct   │ 21        │
+└───────┴───────┴───────────┘
+</code></pre>
+<p><strong>小贴士：精确计算代价高时，用近似值。</strong> 在数十亿行上，<code>approx_count_distinct</code> 和 <code>approx_quantile</code> 只需要精确版本的一小部分内存。在这张小表上，估计出的 404 个不同脚环，与精确值 400 很接近。</p>
+<pre><code>SELECT approx_count_distinct(ring_id), approx_quantile(weight_g, 0.9)
+FROM sightings;
+</code></pre>
+<pre><code>┌────────────────────────────────┬────────────────────────────────┐
+│ approx_count_distinct(ring_id) │ approx_quantile(weight_g, 0.9) │
+├────────────────────────────────┼────────────────────────────────┤
+│ 404                            │ 1236                           │
+└────────────────────────────────┴────────────────────────────────┘
+</code></pre>
+<h2>窗口函数和 ASOF 连接</h2>
+<p>窗口函数基于相邻行计算，但不会把行合并掉。<code>daily_counts</code> 表每个池塘每天一行，包括没有观测到鸭子的日子。下面的查询给出逐日变化和七天滚动平均：</p>
+<pre><code>SELECT
+    pond,
+    seen_at,
+    ducks,
+    ducks - lag(ducks) OVER w                      AS change,
+    round(avg(ducks) OVER (w ROWS 6 PRECEDING), 2) AS rolling_7
+FROM daily_counts
+WINDOW w AS (PARTITION BY pond ORDER BY seen_at)
+ORDER BY pond, seen_at
+LIMIT 8;
+</code></pre>
+<pre><code>┌──────┬────────────┬───────┬────────┬───────────┐
+│ pond │  seen_at   │ ducks │ change │ rolling_7 │
+├──────┼────────────┼───────┼────────┼───────────┤
+│ mill │ 2025-10-01 │ 0     │ NULL   │ 0.0       │
+│ mill │ 2025-10-02 │ 0     │ 0      │ 0.0       │
+│ mill │ 2025-10-03 │ 0     │ 0      │ 0.0       │
+│ mill │ 2025-10-04 │ 1     │ 1      │ 0.25      │
+│ mill │ 2025-10-05 │ 0     │ -1     │ 0.2       │
+│ mill │ 2025-10-06 │ 0     │ 0      │ 0.17      │
+│ mill │ 2025-10-07 │ 0     │ 0      │ 0.14      │
+│ mill │ 2025-10-08 │ 2     │ 2      │ 0.43      │
+└──────┴────────────┴───────┴────────┴───────────┘
+</code></pre>
+<p><strong><code>QUALIFY</code> 可以直接按窗口函数的结果过滤，</strong> 所以找每个池塘最近一次观测时不需要子查询：</p>
+<pre><code>SELECT pond, ring_id, species, seen_at
+FROM sightings
+QUALIFY row_number() OVER (PARTITION BY pond ORDER BY seen_at DESC) = 1
+ORDER BY pond;
+</code></pre>
+<pre><code>┌───────┬─────────┬─────────┬─────────────────────┐
+│ pond  │ ring_id │ species │       seen_at       │
+├───────┼─────────┼─────────┼─────────────────────┤
+│ mill  │ R0015   │ mallard │ 2026-04-18 18:17:29 │
+│ north │ R0077   │ mallard │ 2026-04-14 09:02:03 │
+│ reed  │ R0044   │ teal    │ 2026-04-18 21:44:23 │
+│ south │ R0045   │ wigeon  │ 2026-04-11 16:29:40 │
+└───────┴─────────┴─────────┴─────────────────────┘
+</code></pre>
+<p><strong><a href="https://duckdb.org/2023/09/15/asof-joins-fuzzy-temporal-lookups.html" rel="noopener noreferrer"><code>ASOF JOIN</code></a> 把每一行匹配到另一张表中时间上最近的前一行。</strong> 当两条时间序列的时间戳从不完全重合时，比如观测记录和天气读数，它是合适的工具。<code>weather</code> 表在每个池塘每六小时有一次读数，下面的查询为每次观测附上最近一次的读数：</p>
+<pre><code>SELECT s.ring_id, s.seen_at, w.temp_c, w.wind_kmh
+FROM sightings s
+ASOF JOIN weather w
+  ON s.pond = w.pond
+ AND s.seen_at &gt;= w.read_at
+ORDER BY s.seen_at
+LIMIT 5;
+</code></pre>
+<pre><code>┌─────────┬─────────────────────┬────────┬──────────┐
+│ ring_id │       seen_at       │ temp_c │ wind_kmh │
+├─────────┼─────────────────────┼────────┼──────────┤
+│ R0096   │ 2025-10-01 03:52:49 │ 10.1   │ 20.0     │
+│ R0109   │ 2025-10-01 09:11:24 │ 9.3    │ 33.3     │
+│ R0215   │ 2025-10-01 10:59:02 │ 9.2    │ 31.8     │
+│ R0315   │ 2025-10-01 20:44:16 │ 10.4   │ 26.4     │
+│ R0076   │ 2025-10-01 21:17:05 │ 10.4   │ 26.4     │
+└─────────┴─────────────────────┴────────┴──────────┘
+</code></pre>
+<p><strong>小贴士：列表留在一列里。</strong> <code>list()</code> 把一组值收集成一个数组值，列表函数可以直接作用在这个数组上，无需展开。</p>
+<pre><code>SELECT pond,
+       list(ring_id ORDER BY seen_at)[1:3] AS first_three_rings,
+       len(list(ring_id))                  AS sightings
+FROM sightings
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌───────┬───────────────────────┬───────────┐
+│ pond  │   first_three_rings   │ sightings │
+├───────┼───────────────────────┼───────────┤
+│ mill  │ [R0125, R0127, R0122] │ 96        │
+│ north │ [R0096, R0160, R0180] │ 117       │
+│ reed  │ [R0109, R0323, R0312] │ 80        │
+│ south │ [R0215, R0315, R0076] │ 107       │
+└───────┴───────────────────────┴───────────┘
+</code></pre>
+<h2>把列写好：分区、排序和窄类型</h2>
+<p>数据怎么写，决定了之后的查询能读多快。文章的建议是：写成 Parquet，按大家常用来过滤的列分区，并通过排序让相似的值挨在一起。</p>
+<p>下面的查询把观测数据写到 <code>lake/year=2026/pond=north/</code> 这样的文件夹里，每个文件夹中是压缩过的 Parquet 文件：</p>
+<pre><code>COPY (SELECT *, year(seen_at) AS year FROM sightings)
+TO 'lake'
+(FORMAT parquet, PARTITION_BY (year, pond), COMPRESSION zstd);
+</code></pre>
+<p><strong>写入前先排序。</strong> 压缩在连续相同值上效果最好。先按低基数列排序，可以让这些连续段更长，也让最小值和最大值统计更紧凑，从而跳过更多行组。</p>
+<pre><code>COPY (SELECT * FROM sightings ORDER BY pond, species, seen_at)
+TO 'sightings_sorted.parquet' (FORMAT parquet, ROW_GROUP_SIZE 122_880);
+</code></pre>
+<p><strong>选用窄类型。</strong> 类型越小，占用空间越少。小而固定的取值集合用 <code>ENUM</code>，不需要时间时用 <code>DATE</code> 代替 <code>TIMESTAMP</code>，数值始终较小时用 <code>SMALLINT</code>。这里 <code>species</code> 只有五种可能的值，所以改成 <code>ENUM</code>：</p>
+<pre><code>CREATE TYPE species_t AS ENUM ('mallard', 'teal', 'wigeon', 'pintail', 'tufted');
+ALTER TABLE sightings ALTER species TYPE species_t;
+</code></pre>
+<p><strong>看执行计划，不要靠猜。</strong> <code>EXPLAIN ANALYZE</code> 显示读取了哪些列、哪些过滤条件被下推到了扫描中，以及时间花在了哪里：</p>
+<pre><code>EXPLAIN ANALYZE
+SELECT species, count(*) FROM 'lake/**/*.parquet' WHERE pond = 'north' GROUP BY ALL;
+</code></pre>
+<p>这里要看的是输出中的表扫描部分。因为 <code>pond</code> 是分区列，DuckDB 只扫描了 8 个文件中的 2 个，而且只读取了 <code>species</code> 一列：</p>
+<pre><code>Table Scan
+  Function: PARQUET_SCAN
+  Projections: species
+  File Filters: pond = 'north'
+  Scanning Files: 2/8
+  Total Files Read: 2
+</code></pre>
+<p><strong>小贴士：写明列名，生产环境中避免 <code>SELECT *</code>。</strong> 每少选一列，DuckDB 就少解压一列。在一张 60 列的表上，只选 4 列可以大幅减少读取的数据量。</p>
+<p><strong>直接查询 DataFrame。</strong> DuckDB 可以直接查询 pandas 和 Polars 的 DataFrame 以及 Arrow 表，并以同样的格式返回结果。把结果转成 Polars 要经过 Arrow，所以还需要安装 <code>pyarrow</code>。</p>
+<pre><code>import duckdb
+import polars as pl
+sightings = pl.read_parquet("sightings/2026.parquet")
+duckdb.sql("SELECT pond, count(*) AS sightings FROM sightings GROUP BY ALL ORDER BY ALL").pl()
+</code></pre>
+<pre><code>shape: (4, 2)
+┌───────┬───────────┐
+│ pond  ┆ sightings │
+│ ---   ┆ ---       │
+│ str   ┆ i64       │
+╞═══════╪═══════════╡
+│ mill  ┆ 54        │
+│ north ┆ 58        │
+│ reed  ┆ 48        │
+│ south ┆ 56        │
+└───────┴───────────┘
+</code></pre>
+<h2>结论：只读查询需要的列和值</h2>
+<p>文中每个功能都遵循同一条规则：只读取查询需要的列和值。文章用一张表总结了这些技巧：</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>技巧</th>
+<th>省掉了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FROM 'file.parquet'</code></td>
+<td>查询前先导入数据</td>
+</tr>
+<tr>
+<td><code>SELECT * EXCLUDE (...)</code></td>
+<td>为了去掉 2 列而列出 40 列</td>
+</tr>
+<tr>
+<td><code>COLUMNS('regex')</code></td>
+<td>每一列重复写同一个表达式</td>
+</tr>
+<tr>
+<td><code>SUMMARIZE</code></td>
+<td>手写数据画像查询</td>
+</tr>
+<tr>
+<td><code>GROUP BY ALL</code></td>
+<td>让 <code>SELECT</code> 和 <code>GROUP BY</code> 保持同步</td>
+</tr>
+<tr>
+<td><code>count(*) FILTER (WHERE ...)</code></td>
+<td>每个类别各写一个查询</td>
+</tr>
+<tr>
+<td><code>PIVOT</code> / <code>UNPIVOT</code></td>
+<td>成片的 <code>CASE</code> 表达式</td>
+</tr>
+<tr>
+<td><code>QUALIFY</code></td>
+<td>包在窗口函数外面的子查询</td>
+</tr>
+<tr>
+<td><code>ASOF JOIN</code></td>
+<td>模糊的时间匹配逻辑</td>
+</tr>
+<tr>
+<td><code>COPY ... PARTITION_BY</code></td>
+<td>手工搭建的文件夹结构</td>
+</tr>
+<tr>
+<td><code>COPY</code> 之前先 <code>ORDER BY</code></td>
+<td>压缩差、行组无法跳过</td>
+</tr>
+<tr>
+<td><code>EXPLAIN ANALYZE</code></td>
+<td>猜时间花在了哪里</td>
+</tr>
+</tbody>
+</table>
+<p>行式存储（比如事务型数据库系统）把每条记录存在一起，适合整条记录的查找。分析型查询通常需要的正好相反：跨大量记录的少数几列。文章最后用了一个双关收尾：把鸭子按列排好（Keep your ducks in a column），查询就能跟得上。</p>
+<section class="rewrite-source-media" aria-label="原文附带媒体"><h3 class="source-media-heading">原文附带媒体</h3><p class="completeness-note">原文附带媒体；未核验其与具体段落的对应关系。</p><div class="original-media">
+<figure class="media-figure" data-media-id="duckdb_ducks_column_header"><div class="media-frame"><img src="https://duckdb.org/images/blog/thumbs/ducks-column.svg" data-original-src="https://duckdb.org/images/blog/thumbs/ducks-column.svg" alt="原文配图" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://duckdb.org/2026/11/10/ducks-in-a-column.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div></section></div></section>
+<section class="reader-panel" id="original" data-reader-panel="original" aria-label="原文">
+<h2 class="section-heading">原文</h2><p class="completeness-note">原文正文取自 DuckDB 官方博客页面并转为 Markdown；文章头图移到上方媒体区，以 [Header image] 标出原位置；页面导航、文内目录和“Recent posts”推荐区未保存，小标题上的页内锚点链接已去掉，代码块未保留语法高亮标记。原页署名为 The DuckDB team，标注 8 min read。</p><h3 class="original-title">Ducks in a Column</h3>
+<div class="original-media">
+<figure class="media-figure" data-media-id="duckdb_ducks_column_header"><div class="media-frame"><img src="https://duckdb.org/images/blog/thumbs/ducks-column.svg" data-original-src="https://duckdb.org/images/blog/thumbs/ducks-column.svg" alt="原文配图" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://duckdb.org/2026/11/10/ducks-in-a-column.html" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div>
+<div class="prose" lang="en"><p>[Header image: shown in the media section above]</p>
+<p><em>TL;DR: DuckDB is fast among other reasons because it stores data by column, so a query reads only the columns it names. This post covers DuckDB features that take advantage of that design choice: querying files in place, column-level SQL, aggregation shortcuts, window functions, ASOF joins, and writing well-organized Parquet.</em></p>
+<h2>Why Columns?</h2>
+<p>DuckDB stores each column separately instead of storing each row as one record. A query that touches three columns out of fifty reads only those three.</p>
+<p>That design choice explains many of DuckDB’s performance features. Columnar storage <a href="https://duckdb.org/2022/10/28/lightweight-compression.html" rel="noopener noreferrer">compresses well</a> because a column holds values of one type, and those values often repeat. The engine processes each column in vectors of 2,048 values at a time. And a query that asks for fewer columns does less work.</p>
+<p>The examples in this post use a sample dataset of 400 ducks, each marked with a numbered leg band (a ring) and seen at one of four ponds between October 2025 and April 2026. The <code>sightings</code> table has five columns: <code>ring_id</code>, <code>pond</code>, <code>species</code>, <code>weight_g</code>, and <code>seen_at</code>.</p>
+<pre><code>SELECT * FROM sightings LIMIT 3;
+</code></pre>
+<pre><code>┌─────────┬───────┬─────────┬──────────┬─────────────────────┐
+│ ring_id │ pond  │ species │ weight_g │       seen_at       │
+├─────────┼───────┼─────────┼──────────┼─────────────────────┤
+│ R0001   │ south │ wigeon  │ 862      │ 2025-11-06 12:18:38 │
+│ R0002   │ south │ wigeon  │ 578      │ 2025-12-04 00:12:54 │
+│ R0003   │ south │ wigeon  │ 734      │ 2026-01-06 16:50:41 │
+└─────────┴───────┴─────────┴──────────┴─────────────────────┘
+</code></pre>
+<p>Every example runs in the DuckDB CLI or from Python with <code>duckdb.sql(...)</code>.</p>
+<pre><code>pip install duckdb                        # Python
+curl https://install.duckdb.org | bash    # CLI
+</code></pre>
+<h2>Querying Files in Place</h2>
+<p>You don’t need to load data before you query it. DuckDB treats a file path as a table and infers column names and types from the file.</p>
+<pre><code>SELECT * FROM 'ponds.csv';
+</code></pre>
+<pre><code>┌─────────┬───────┬─────────┐
+│ pond_id │ pond  │ area_m2 │
+├─────────┼───────┼─────────┤
+│ 0007    │ north │ 4200    │
+│ 0042    │ south │ 1800    │
+│ 0113    │ mill  │ 950     │
+│ 0256    │ reed  │ 3100    │
+└─────────┴───────┴─────────┘
+</code></pre>
+<p>A glob pattern queries a whole folder of Parquet files. With <code>filename = true</code>, DuckDB adds the file name as a column:</p>
+<pre><code>SELECT filename, count(*) AS sightings
+FROM read_parquet('sightings/*.parquet', filename = true)
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌────────────────────────┬───────────┐
+│        filename        │ sightings │
+├────────────────────────┼───────────┤
+│ sightings/2025.parquet │ 184       │
+│ sightings/2026.parquet │ 216       │
+└────────────────────────┴───────────┘
+</code></pre>
+<p>DuckDB can also read remote files over <a href="https://duckdb.org/docs/2.0/core_extensions/httpfs/https.html" rel="noopener noreferrer">HTTPS</a> or <a href="https://duckdb.org/docs/2.0/core_extensions/httpfs/s3api.html" rel="noopener noreferrer">S3</a>. The <a href="https://duckdb.org/docs/2.0/core_extensions/httpfs/overview.html" rel="noopener noreferrer">httpfs extension</a> loads automatically when you use these paths:</p>
+<pre><code>SELECT * FROM 's3://wetlands/2026/*.parquet';
+</code></pre>
+<p>The <a href="https://duckdb.org/docs/2.0/data/parquet/overview.html" rel="noopener noreferrer">Parquet file format</a> also stores data by column. DuckDB reads only the columns your query names. Parquet also stores min and max statistics for each row group, so DuckDB can skip row groups whose statistics rule out a filter (<a href="https://duckdb.org/docs/2.0/guides/performance/indexing.html#zonemaps" rel="noopener noreferrer">zonemaps</a>).</p>
+<pre><code>SELECT species, count(*) AS sightings
+FROM 'sightings/*.parquet'
+WHERE seen_at &gt;= DATE '2026-01-01'
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌─────────┬───────────┐
+│ species │ sightings │
+├─────────┼───────────┤
+│ mallard │ 89        │
+│ pintail │ 29        │
+│ teal    │ 37        │
+│ tufted  │ 29        │
+│ wigeon  │ 32        │
+└─────────┴───────────┘
+</code></pre>
+<blockquote>
+<p>Tip <strong>Check the sniffer’s work.</strong> When a CSV loads with unexpected types, ask DuckDB what it guessed. Then pin the types you need.</p>
+</blockquote>
+<pre><code>DESCRIBE SELECT * FROM 'ponds.csv';
+</code></pre>
+<pre><code>┌─────────────┬─────────────┬──────┬──────┬─────────┬───────┐
+│ column_name │ column_type │ null │ key  │ default │ extra │
+├─────────────┼─────────────┼──────┼──────┼─────────┼───────┤
+│ pond_id     │ VARCHAR     │ YES  │ NULL │ NULL    │ NULL  │
+│ pond        │ VARCHAR     │ YES  │ NULL │ NULL    │ NULL  │
+│ area_m2     │ BIGINT      │ YES  │ NULL │ NULL    │ NULL  │
+└─────────────┴─────────────┴──────┴──────┴─────────┴───────┘
+</code></pre>
+<p>The sniffer keeps <code>pond_id</code> as text, so the leading zeros survive. To override a guess, pass the type explicitly:</p>
+<pre><code>SELECT * FROM read_csv('ponds.csv', types = {'area_m2': 'DOUBLE'});
+</code></pre>
+<blockquote>
+<p>Tip <strong>Hive partitions become columns.</strong> A path like <code>year=2026/pond=north/</code> turns into <code>year</code> and <code>pond</code> columns, and filters on them skip folders entirely. The next section creates this layout.</p>
+</blockquote>
+<pre><code>SELECT count(*)
+FROM read_parquet('lake/*/*/*.parquet', hive_partitioning = true)
+WHERE year = 2026 AND pond = 'north';
+</code></pre>
+<pre><code>┌──────────────┐
+│ count_star() │
+├──────────────┤
+│ 58           │
+└──────────────┘
+</code></pre>
+<h2>Column-Level SQL</h2>
+<p>DuckDB’s <a href="https://duckdb.org/docs/2.0/sql/dialect/friendly_sql.html" rel="noopener noreferrer">friendly SQL</a> lets you select, exclude, and transform columns in bulk. On wide tables, this saves typing and keeps queries readable.</p>
+<p><strong>Drop columns with <code>EXCLUDE</code>, or rewrite them in place with <code>REPLACE</code>.</strong></p>
+<pre><code>SELECT * EXCLUDE (ring_id) FROM sightings LIMIT 3;
+</code></pre>
+<pre><code>┌───────┬─────────┬──────────┬─────────────────────┐
+│ pond  │ species │ weight_g │       seen_at       │
+├───────┼─────────┼──────────┼─────────────────────┤
+│ south │ wigeon  │ 862      │ 2025-11-06 12:18:38 │
+│ south │ wigeon  │ 578      │ 2025-12-04 00:12:54 │
+│ south │ wigeon  │ 734      │ 2026-01-06 16:50:41 │
+└───────┴─────────┴──────────┴─────────────────────┘
+</code></pre>
+<pre><code>SELECT * REPLACE (upper(species) AS species) FROM sightings LIMIT 3;
+</code></pre>
+<pre><code>┌─────────┬───────┬─────────┬──────────┬─────────────────────┐
+│ ring_id │ pond  │ species │ weight_g │       seen_at       │
+├─────────┼───────┼─────────┼──────────┼─────────────────────┤
+│ R0001   │ south │ WIGEON  │ 862      │ 2025-11-06 12:18:38 │
+│ R0002   │ south │ WIGEON  │ 578      │ 2025-12-04 00:12:54 │
+│ R0003   │ south │ WIGEON  │ 734      │ 2026-01-06 16:50:41 │
+└─────────┴───────┴─────────┴──────────┴─────────────────────┘
+</code></pre>
+<p><strong>Select columns by pattern with <code>COLUMNS()</code>.</strong> It takes a regular expression, a list of names, or a lambda, and applies an expression to every matching column. The <code>pond_readings</code> table has three temperature columns, so this query returns the highest reading for each:</p>
+<pre><code>SELECT max(COLUMNS('^temp_')) FROM pond_readings;
+</code></pre>
+<pre><code>┌────────────────┬─────────────┬────────────────┐
+│ temp_morning_c │ temp_noon_c │ temp_evening_c │
+├────────────────┼─────────────┼────────────────┤
+│ 8.0            │ 13.7        │ 8.3            │
+└────────────────┴─────────────┴────────────────┘
+</code></pre>
+<p>The same pattern handles missing values. This query replaces each <code>NULL</code> with <code>0</code> in every column whose name ends in <code>_count</code>:</p>
+<pre><code>SELECT coalesce(COLUMNS(lambda c: c LIKE '%_count'), 0)
+FROM counts;
+</code></pre>
+<pre><code>┌───────────────┬────────────┬──────────────┐
+│ mallard_count │ teal_count │ wigeon_count │
+├───────────────┼────────────┼──────────────┤
+│ 12            │ 0          │ 3            │
+│ 0             │ 4          │ 1            │
+│ 7             │ 2          │ 0            │
+│ 0             │ 0          │ 5            │
+└───────────────┴────────────┴──────────────┘
+</code></pre>
+<p>You can rename matching columns as you select them. In the replacement, <code>\1</code> refers to the first capture group:</p>
+<pre><code>SELECT COLUMNS('temp_(.*)_c') AS '\1_celsius'
+FROM pond_readings
+LIMIT 3;
+</code></pre>
+<pre><code>┌─────────────────┬──────────────┬─────────────────┐
+│ morning_celsius │ noon_celsius │ evening_celsius │
+├─────────────────┼──────────────┼─────────────────┤
+│ 6.3             │ 9.1          │ 8.0             │
+│ 6.9             │ 10.7         │ 6.6             │
+│ 7.8             │ 8.8          │ 7.9             │
+└─────────────────┴──────────────┴─────────────────┘
+</code></pre>
+<p><strong>Start with <code>FROM</code>.</strong> You can lead with the table and leave out <code>SELECT</code>. <code>FROM sightings;</code> alone is the same as <code>SELECT * FROM sightings;</code>.</p>
+<pre><code>FROM sightings SELECT species, pond LIMIT 3;
+</code></pre>
+<pre><code>┌─────────┬───────┐
+│ species │ pond  │
+├─────────┼───────┤
+│ wigeon  │ south │
+│ wigeon  │ south │
+│ wigeon  │ south │
+└─────────┴───────┘
+</code></pre>
+<p><strong>Pack columns into a <code>STRUCT</code>.</strong> A struct is a single column with named fields. Unpack one with <code>.*</code> to turn its fields back into top-level columns:</p>
+<pre><code>SELECT sighting.* FROM (
+    SELECT {'species': species, 'pond': pond} AS sighting FROM sightings
+)
+LIMIT 3;
+</code></pre>
+<pre><code>┌─────────┬───────┐
+│ species │ pond  │
+├─────────┼───────┤
+│ wigeon  │ south │
+│ wigeon  │ south │
+│ wigeon  │ south │
+└─────────┴───────┘
+</code></pre>
+<blockquote>
+<p>Tip <strong>Let DuckDB profile the columns.</strong> <code>SUMMARIZE</code> returns one row per column, with its type, min, max, approximate distinct count, null percentage, and quartiles.</p>
+</blockquote>
+<pre><code>SUMMARIZE sightings;
+SUMMARIZE SELECT * FROM 'sightings/*.parquet';
+</code></pre>
+<h2>Aggregation Shortcuts</h2>
+<p>Aggregates benefit from columnar storage because summing a column means scanning one column of values. DuckDB adds syntax that keeps the SQL as short as the work.</p>
+<p><strong><a href="https://duckdb.org/docs/2.0/sql/query_syntax/groupby.html#group-by-all" rel="noopener noreferrer"><code>GROUP BY ALL</code></a> groups by every non-aggregated column in the <code>SELECT</code> clause, so you don’t repeat the list.</strong></p>
+<pre><code>SELECT pond, species, count(*) AS sightings, round(avg(weight_g)) AS avg_weight_g
+FROM sightings
+GROUP BY ALL
+ORDER BY ALL
+LIMIT 5;
+</code></pre>
+<pre><code>┌──────┬─────────┬───────────┬──────────────┐
+│ pond │ species │ sightings │ avg_weight_g │
+├──────┼─────────┼───────────┼──────────────┤
+│ mill │ mallard │ 46        │ 1110.0       │
+│ mill │ pintail │ 11        │ 910.0        │
+│ mill │ teal    │ 15        │ 352.0        │
+│ mill │ tufted  │ 10        │ 879.0        │
+│ mill │ wigeon  │ 14        │ 720.0        │
+└──────┴─────────┴───────────┴──────────────┘
+</code></pre>
+<p><strong><code>FILTER</code> counts several categories in one pass,</strong> instead of running one query per category:</p>
+<pre><code>SELECT
+    pond,
+    count(*) FILTER (WHERE species = 'mallard') AS mallards,
+    count(*) FILTER (WHERE species = 'teal')    AS teals,
+    count(*) FILTER (WHERE weight_g &gt; 1200)     AS heavyweights
+FROM sightings
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌───────┬──────────┬───────┬──────────────┐
+│ pond  │ mallards │ teals │ heavyweights │
+├───────┼──────────┼───────┼──────────────┤
+│ mill  │ 46       │ 15    │ 16           │
+│ north │ 48       │ 17    │ 12           │
+│ reed  │ 26       │ 14    │ 6            │
+│ south │ 48       │ 19    │ 16           │
+└───────┴──────────┴───────┴──────────────┘
+</code></pre>
+<p><strong><code>arg_max</code> returns the value from the row with the largest value of another column,</strong> so you don’t need a self-join. Here it finds the species of the heaviest bird at each pond:</p>
+<pre><code>SELECT pond,
+       arg_max(species, weight_g) AS heaviest_species,
+       max(weight_g) AS max_weight_g
+FROM sightings
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌───────┬──────────────────┬──────────────┐
+│ pond  │ heaviest_species │ max_weight_g │
+├───────┼──────────────────┼──────────────┤
+│ mill  │ mallard          │ 1358         │
+│ north │ mallard          │ 1359         │
+│ reed  │ mallard          │ 1312         │
+│ south │ mallard          │ 1357         │
+└───────┴──────────────────┴──────────────┘
+</code></pre>
+<p><strong><code>PIVOT</code> and <code>UNPIVOT</code> turn rows into columns and back.</strong> <code>PIVOT</code> makes one column per distinct value, here one column per species:</p>
+<pre><code>PIVOT sightings ON species USING count(*) GROUP BY pond ORDER BY pond;
+</code></pre>
+<pre><code>┌───────┬─────────┬─────────┬──────┬────────┬────────┐
+│ pond  │ mallard │ pintail │ teal │ tufted │ wigeon │
+├───────┼─────────┼─────────┼──────┼────────┼────────┤
+│ mill  │ 46      │ 11      │ 15   │ 10     │ 14     │
+│ north │ 48      │ 19      │ 17   │ 16     │ 17     │
+│ reed  │ 26      │ 11      │ 14   │ 13     │ 16     │
+│ south │ 48      │ 11      │ 19   │ 14     │ 15     │
+└───────┴─────────┴─────────┴──────┴────────┴────────┘
+</code></pre>
+<p><code>UNPIVOT</code> goes the other way. The <code>monthly_counts</code> table has one column per month, so this query turns those columns back into rows:</p>
+<pre><code>SELECT * FROM (
+    UNPIVOT monthly_counts
+    ON COLUMNS(* EXCLUDE pond)
+    INTO NAME month VALUE sightings
+)
+WHERE pond = 'north';
+</code></pre>
+<pre><code>┌───────┬───────┬───────────┐
+│ pond  │ month │ sightings │
+├───────┼───────┼───────────┤
+│ north │ Apr   │ 6         │
+│ north │ Dec   │ 18        │
+│ north │ Feb   │ 14        │
+│ north │ Jan   │ 21        │
+│ north │ Mar   │ 17        │
+│ north │ Nov   │ 20        │
+│ north │ Oct   │ 21        │
+└───────┴───────┴───────────┘
+</code></pre>
+<blockquote>
+<p>Tip <strong>Approximate when exact is expensive.</strong> On billions of rows, <code>approx_count_distinct</code> and <code>approx_quantile</code> use a fraction of the memory of their exact counterparts. On this small table, the estimate of 404 distinct rings is close to the exact count of 400.</p>
+</blockquote>
+<pre><code>SELECT approx_count_distinct(ring_id), approx_quantile(weight_g, 0.9)
+FROM sightings;
+</code></pre>
+<pre><code>┌────────────────────────────────┬────────────────────────────────┐
+│ approx_count_distinct(ring_id) │ approx_quantile(weight_g, 0.9) │
+├────────────────────────────────┼────────────────────────────────┤
+│ 404                            │ 1236                           │
+└────────────────────────────────┴────────────────────────────────┘
+</code></pre>
+<h2>Window Functions and ASOF Joins</h2>
+<p>Window functions compute over neighboring rows without collapsing them. The <code>daily_counts</code> table has one row per pond per day, including days with no sightings. This query shows the day-over-day change and a rolling seven-day average:</p>
+<pre><code>SELECT
+    pond,
+    seen_at,
+    ducks,
+    ducks - lag(ducks) OVER w                      AS change,
+    round(avg(ducks) OVER (w ROWS 6 PRECEDING), 2) AS rolling_7
+FROM daily_counts
+WINDOW w AS (PARTITION BY pond ORDER BY seen_at)
+ORDER BY pond, seen_at
+LIMIT 8;
+</code></pre>
+<pre><code>┌──────┬────────────┬───────┬────────┬───────────┐
+│ pond │  seen_at   │ ducks │ change │ rolling_7 │
+├──────┼────────────┼───────┼────────┼───────────┤
+│ mill │ 2025-10-01 │ 0     │ NULL   │ 0.0       │
+│ mill │ 2025-10-02 │ 0     │ 0      │ 0.0       │
+│ mill │ 2025-10-03 │ 0     │ 0      │ 0.0       │
+│ mill │ 2025-10-04 │ 1     │ 1      │ 0.25      │
+│ mill │ 2025-10-05 │ 0     │ -1     │ 0.2       │
+│ mill │ 2025-10-06 │ 0     │ 0      │ 0.17      │
+│ mill │ 2025-10-07 │ 0     │ 0      │ 0.14      │
+│ mill │ 2025-10-08 │ 2     │ 2      │ 0.43      │
+└──────┴────────────┴───────┴────────┴───────────┘
+</code></pre>
+<p><strong><code>QUALIFY</code> filters on a window function directly,</strong> so finding the latest sighting at each pond doesn’t need a subquery:</p>
+<pre><code>SELECT pond, ring_id, species, seen_at
+FROM sightings
+QUALIFY row_number() OVER (PARTITION BY pond ORDER BY seen_at DESC) = 1
+ORDER BY pond;
+</code></pre>
+<pre><code>┌───────┬─────────┬─────────┬─────────────────────┐
+│ pond  │ ring_id │ species │       seen_at       │
+├───────┼─────────┼─────────┼─────────────────────┤
+│ mill  │ R0015   │ mallard │ 2026-04-18 18:17:29 │
+│ north │ R0077   │ mallard │ 2026-04-14 09:02:03 │
+│ reed  │ R0044   │ teal    │ 2026-04-18 21:44:23 │
+│ south │ R0045   │ wigeon  │ 2026-04-11 16:29:40 │
+└───────┴─────────┴─────────┴─────────────────────┘
+</code></pre>
+<p><strong><a href="https://duckdb.org/2023/09/15/asof-joins-fuzzy-temporal-lookups.html" rel="noopener noreferrer"><code>ASOF JOIN</code></a> matches each row to the nearest earlier row in another table.</strong> It’s the right tool when two time series never share exact timestamps, such as sightings and weather readings. The <code>weather</code> table has a reading every six hours at each pond. This query attaches the most recent reading to each sighting:</p>
+<pre><code>SELECT s.ring_id, s.seen_at, w.temp_c, w.wind_kmh
+FROM sightings s
+ASOF JOIN weather w
+  ON s.pond = w.pond
+ AND s.seen_at &gt;= w.read_at
+ORDER BY s.seen_at
+LIMIT 5;
+</code></pre>
+<pre><code>┌─────────┬─────────────────────┬────────┬──────────┐
+│ ring_id │       seen_at       │ temp_c │ wind_kmh │
+├─────────┼─────────────────────┼────────┼──────────┤
+│ R0096   │ 2025-10-01 03:52:49 │ 10.1   │ 20.0     │
+│ R0109   │ 2025-10-01 09:11:24 │ 9.3    │ 33.3     │
+│ R0215   │ 2025-10-01 10:59:02 │ 9.2    │ 31.8     │
+│ R0315   │ 2025-10-01 20:44:16 │ 10.4   │ 26.4     │
+│ R0076   │ 2025-10-01 21:17:05 │ 10.4   │ 26.4     │
+└─────────┴─────────────────────┴────────┴──────────┘
+</code></pre>
+<blockquote>
+<p>Tip <strong>Lists stay in one column.</strong> <code>list()</code> gathers a group into a single array value, and list functions work on that array without unnesting it.</p>
+</blockquote>
+<pre><code>SELECT pond,
+       list(ring_id ORDER BY seen_at)[1:3] AS first_three_rings,
+       len(list(ring_id))                  AS sightings
+FROM sightings
+GROUP BY ALL
+ORDER BY ALL;
+</code></pre>
+<pre><code>┌───────┬───────────────────────┬───────────┐
+│ pond  │   first_three_rings   │ sightings │
+├───────┼───────────────────────┼───────────┤
+│ mill  │ [R0125, R0127, R0122] │ 96        │
+│ north │ [R0096, R0160, R0180] │ 117       │
+│ reed  │ [R0109, R0323, R0312] │ 80        │
+│ south │ [R0215, R0315, R0076] │ 107       │
+└───────┴───────────────────────┴───────────┘
+</code></pre>
+<h2>Writing Columns Well</h2>
+<p>How you write data determines how fast later queries can read it. Write Parquet, partition on the columns people filter by, and sort so that similar values sit together.</p>
+<p>This query writes the sightings to folders such as <code>lake/year=2026/pond=north/</code>, with compressed Parquet files in each:</p>
+<pre><code>COPY (SELECT *, year(seen_at) AS year FROM sightings)
+TO 'lake'
+(FORMAT parquet, PARTITION_BY (year, pond), COMPRESSION zstd);
+</code></pre>
+<p><strong>Sort before you write.</strong> Compression works best on runs of identical values. Sorting by low-cardinality columns first makes those runs longer, and it makes the min and max statistics tighter, so more row groups can be skipped.</p>
+<pre><code>COPY (SELECT * FROM sightings ORDER BY pond, species, seen_at)
+TO 'sightings_sorted.parquet' (FORMAT parquet, ROW_GROUP_SIZE 122_880);
+</code></pre>
+<p><strong>Pick narrow types.</strong> A smaller type takes less space. Use <code>ENUM</code> for small fixed sets, <code>DATE</code> instead of <code>TIMESTAMP</code> when you don’t need the time, and <code>SMALLINT</code> when values stay small. Here, <code>species</code> has only five possible values, so it becomes an <code>ENUM</code>:</p>
+<pre><code>CREATE TYPE species_t AS ENUM ('mallard', 'teal', 'wigeon', 'pintail', 'tufted');
+ALTER TABLE sightings ALTER species TYPE species_t;
+</code></pre>
+<p><strong>Check the plan rather than guessing.</strong> <code>EXPLAIN ANALYZE</code> shows which columns were read, which filters were pushed into the scan, and where the time went:</p>
+<pre><code>EXPLAIN ANALYZE
+SELECT species, count(*) FROM 'lake/**/*.parquet' WHERE pond = 'north' GROUP BY ALL;
+</code></pre>
+<p>The part of the output that matters here is the table scan. DuckDB scans 2 of the 8 files, because <code>pond</code> is a partition column, and it reads only the <code>species</code> column:</p>
+<pre><code>Table Scan
+  Function: PARQUET_SCAN
+  Projections: species
+  File Filters: pond = 'north'
+  Scanning Files: 2/8
+  Total Files Read: 2
+</code></pre>
+<blockquote>
+<p>Tip <strong>Name your columns, and avoid <code>SELECT *</code> in production.</strong> Every column you leave out is one DuckDB never decompresses. On a 60-column table, selecting 4 columns can cut the data read dramatically.</p>
+</blockquote>
+<p><strong>Query DataFrames in place.</strong> DuckDB queries pandas and Polars DataFrames and Arrow tables directly, and it returns results in the same formats. Converting a result to Polars goes through Arrow, so install <code>pyarrow</code> as well.</p>
+<pre><code>import duckdb
+import polars as pl
+
+sightings = pl.read_parquet("sightings/2026.parquet")
+duckdb.sql("SELECT pond, count(*) AS sightings FROM sightings GROUP BY ALL ORDER BY ALL").pl()
+</code></pre>
+<pre><code>shape: (4, 2)
+┌───────┬───────────┐
+│ pond  ┆ sightings │
+│ ---   ┆ ---       │
+│ str   ┆ i64       │
+╞═══════╪═══════════╡
+│ mill  ┆ 54        │
+│ north ┆ 58        │
+│ reed  ┆ 48        │
+│ south ┆ 56        │
+└───────┴───────────┘
+</code></pre>
+<h2>Conclusion</h2>
+<p>Each feature in this post follows one rule: read only the columns and values your query needs. This table summarizes the tricks:</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>Trick</th>
+<th>What it saves you</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FROM 'file.parquet'</code></td>
+<td>Loading data before querying it</td>
+</tr>
+<tr>
+<td><code>SELECT * EXCLUDE (...)</code></td>
+<td>Listing 40 columns to drop 2</td>
+</tr>
+<tr>
+<td><code>COLUMNS('regex')</code></td>
+<td>Repeating one expression per column</td>
+</tr>
+<tr>
+<td><code>SUMMARIZE</code></td>
+<td>Writing a profiling query by hand</td>
+</tr>
+<tr>
+<td><code>GROUP BY ALL</code></td>
+<td>Keeping <code>SELECT</code> and <code>GROUP BY</code> in sync</td>
+</tr>
+<tr>
+<td><code>count(*) FILTER (WHERE ...)</code></td>
+<td>One query per category</td>
+</tr>
+<tr>
+<td><code>PIVOT</code> / <code>UNPIVOT</code></td>
+<td>Walls of <code>CASE</code> expressions</td>
+</tr>
+<tr>
+<td><code>QUALIFY</code></td>
+<td>Subqueries around window functions</td>
+</tr>
+<tr>
+<td><code>ASOF JOIN</code></td>
+<td>Fuzzy time-matching logic</td>
+</tr>
+<tr>
+<td><code>COPY ... PARTITION_BY</code></td>
+<td>Hand-built folder layouts</td>
+</tr>
+<tr>
+<td><code>ORDER BY</code> before <code>COPY</code></td>
+<td>Poor compression and unskippable row groups</td>
+</tr>
+<tr>
+<td><code>EXPLAIN ANALYZE</code></td>
+<td>Guessing where the time went</td>
+</tr>
+</tbody>
+</table>
+<p>Row stores, such as transactional database systems, keep each record together. That suits lookups of one whole record. Analytical queries usually need the opposite: a few columns across many records. Keep your ducks in a column, and your queries will keep up.</p></div>
+</section>
+<footer class="source-box"><span>内容来自原作者；中文为新知编辑改写，非逐字翻译。</span><div><a href="https://duckdb.org/2026/11/10/ducks-in-a-column.html" target="_blank" rel="noopener noreferrer">打开原文 ↗</a></div></footer>
+</article>
+</main>
+<footer class="site-footer"><span>新知 · AI、Web3 与数据领域的海外一手长文中文改写<br>每日更新 · 中国标准时间（UTC+8） · 基于 <a href="https://github.com/joeseesun/xnews" target="_blank" rel="noopener noreferrer">xnews</a>（MIT）</span><nav class="footer-links" aria-label="页尾导航"><a href="/feed.xml">全文 RSS ↗</a><a href="/archive">全部文章</a><a href="/about">关于</a></nav></footer>
+
+<script data-source="/static/app.522792b3284b.js">/* D · progressive visual-journal reader. No framework, no content rewriting. */
+(() => {
+  'use strict';
+  const $ = (selector, root = document) => root.querySelector(selector);
+  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  const readerMemory = new Map();
+  const mediaBound = new WeakSet();
+  const nextFrame = callback => requestAnimationFrame(callback);
+  const safeFocus = element => { if (element?.isConnected) element.focus({preventScroll: true}); };
+  function currentTheme() { return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'; }
+  function paintTheme() {
+    const dark = currentTheme() === 'dark';
+    const button = $('#theme-btn');
+    if (button) {
+      button.setAttribute('aria-pressed', String(dark));
+      button.setAttribute('aria-label', dark ? '切换为亮色主题' : '切换为暗色主题');
+    }
+    $('meta[name="theme-color"]')?.setAttribute('content', dark ? '#20241e' : '#fffefa');
+  }
+  paintTheme();
+  $('#theme-btn')?.addEventListener('click', () => {
+    const style = document.createElement('style');
+    style.textContent = '*,*::before,*::after{transition:none!important}';
+    document.head.append(style);
+    const next = currentTheme() === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('xz.theme', next); } catch {}
+    paintTheme();
+    void document.documentElement.offsetHeight;
+    nextFrame(() => nextFrame(() => style.remove()));
+  });
+
+  // Filter the existing static cards; content and native links work without JS.
+  const discovery = $('[data-discovery]');
+  if (discovery) {
+    const grid = $('[data-news-grid]');
+    const cards = $$('.news-card', grid);
+    const search = $('#story-search');
+    const clear = $('[data-clear-search]');
+    const empty = $('[data-search-empty]');
+    const normalize = value => value.normalize('NFKC').toLocaleLowerCase().trim();
+    const index = cards.map(card => normalize(card.dataset.search || ''));
+    let kind = 'all', layout = discovery.dataset.defaultView;
+    function render(writeURL = true) {
+      const terms = normalize(search.value).split(/\s+/).filter(Boolean);
+      let count = 0;
+      cards.forEach((card, i) => {
+        card.hidden = !(kind === 'all' || card.dataset.kind === kind) || !terms.every(term => index[i].includes(term));
+        if (!card.hidden) count++;
+      });
+      grid.dataset.layout = layout;
+      grid.classList.toggle('is-filtered', kind !== 'all' || terms.length > 0);
+      $$('[data-filter]', discovery).forEach(button => button.setAttribute('aria-pressed', String(button.dataset.filter === kind)));
+      $$('[data-layout]', discovery).forEach(button => button.setAttribute('aria-pressed', String(button.dataset.layout === layout)));
+      $('[data-result-count]').textContent = count === cards.length ? `${count} 篇文章 · 最新在前` : `找到 ${count} 篇 · 共 ${cards.length} 篇`;
+      clear.hidden = !search.value;
+      empty.hidden = count !== 0;
+      $('[data-empty-description]').textContent = search.value.trim() ? `试试更短的关键词，或清除「${search.value.trim()}」与类型筛选。` : '这个类型暂时没有文章，试试查看全部内容。';
+      if (writeURL) {
+        const url = new URL(location.href);
+        for (const [key, value] of [['q', search.value.trim()], ['type', kind === 'all' ? '' : kind], ['view', layout === discovery.dataset.defaultView ? '' : layout]]) {
+          if (value) url.searchParams.set(key, value); else url.searchParams.delete(key);
+        }
+        history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+      }
+    }
+    function restore() {
+      if (location.pathname.startsWith('/a/')) return;
+      const params = new URLSearchParams(location.search);
+      search.value = params.get('q') || '';
+      kind = ['text', 'video'].includes(params.get('type')) ? params.get('type') : 'all';
+      layout = ['journal', 'list'].includes(params.get('view')) ? params.get('view') : discovery.dataset.defaultView;
+      render(false);
+    }
+    search.addEventListener('input', () => render());
+    clear.addEventListener('click', () => { search.value = ''; render(); search.focus(); });
+    $$('[data-filter]', discovery).forEach(button => button.addEventListener('click', () => { kind = button.dataset.filter; render(); }));
+    $$('[data-layout]', discovery).forEach(button => button.addEventListener('click', () => { layout = button.dataset.layout; render(); }));
+    $('[data-reset-filters]').addEventListener('click', () => { kind = 'all'; search.value = ''; render(); search.focus(); });
+    window.addEventListener('popstate', restore);
+    discovery.hidden = false;
+    restore();
+  }
+  function suspendMedia(root) {
+    $$('video,audio', root).forEach(media => { try { media.pause(); } catch {} });
+    $$('iframe[src]', root).forEach(frame => {
+      frame.dataset.pausedSrc = frame.getAttribute('src');
+      frame.removeAttribute('src');
+    });
+  }
+  function resumeEmbeds(root) {
+    $$('iframe[data-paused-src]', root).forEach(frame => {
+      frame.setAttribute('src', frame.dataset.pausedSrc);
+      delete frame.dataset.pausedSrc;
+    });
+  }
+  function bindMedia(root) {
+    $$('img,video,audio', root).forEach(media => {
+      if (mediaBound.has(media)) return;
+      mediaBound.add(media);
+      const figure = media.closest('.media-figure');
+      const notice = figure && $('.media-error', figure);
+      let bufferingTimer = null, requestedPlayback = false;
+      function clearBuffering() {
+        clearTimeout(bufferingTimer); bufferingTimer = null;
+        if (notice?.dataset.mediaState === 'buffering') notice.hidden = true;
+      }
+      const failed = () => {
+        requestedPlayback = false; clearBuffering();
+        const cover = media.closest('[data-cover]');
+        if (cover) cover.closest('.news-card')?.classList.add('media-failed');
+        if (figure) {
+          if (notice) {
+            notice.textContent = /^(VIDEO|AUDIO)$/.test(media.tagName)
+              ? '此处暂时无法播放，请通过下方原文链接观看或收听。'
+              : '图片未能载入，请通过下方原文链接查看。';
+            notice.dataset.mediaState = 'failed'; notice.hidden = false;
+          }
+          media.hidden = true;
+          if (media.tagName === 'VIDEO') {
+            const poster = $('[data-video-fallback]', figure);
+            if (poster) poster.hidden = false;
+          }
+        }
+      };
+      media.addEventListener('error', failed);
+      if (/^(VIDEO|AUDIO)$/.test(media.tagName)) {
+        const armBuffering = () => {
+          if (!requestedPlayback || bufferingTimer || media.hidden) return;
+          bufferingTimer = setTimeout(() => {
+            bufferingTimer = null;
+            if (notice && figure.isConnected && requestedPlayback && !media.hidden && !media.closest('[hidden]')) {
+              notice.textContent = '外部媒体暂未能继续播放，可通过下方原文链接观看或收听。';
+              notice.dataset.mediaState = 'buffering'; notice.hidden = false;
+            }
+          }, 10000);
+        };
+        media.addEventListener('play', () => { requestedPlayback = true; armBuffering(); });
+        media.addEventListener('waiting', armBuffering);
+        media.addEventListener('stalled', armBuffering);
+        media.addEventListener('playing', clearBuffering);
+        ['pause', 'ended', 'emptied'].forEach(name => media.addEventListener(name, () => {
+          requestedPlayback = false; clearBuffering();
+        }));
+      }
+      if (media.tagName === 'IMG' && media.complete && media.naturalWidth === 0) failed();
+    });
+  }
+  bindMedia(document);
+
+  // Accessible manual-activation tabs; no JS leaves both complete sections and links intact.
+  function enhanceReader(article, scroller, onView) {
+    const tablist = $('[data-tabs]', article);
+    if (!tablist) return null;
+    const tabs = $$('[data-view]', tablist);
+    const panels = $$('[data-reader-panel]', article);
+    const id = article.dataset.articleId;
+    const memory = readerMemory.get(id) || {positions: {}, view: 'rewrite'};
+    readerMemory.set(id, memory);
+    const isWindow = scroller === window;
+    const getTop = () => isWindow ? window.scrollY : scroller.scrollTop;
+    const setTop = value => { if (isWindow) window.scrollTo(0, value); else scroller.scrollTop = value; };
+    const toolbar = tablist.closest('.reader-tabs');
+    const position = $('.reading-position', toolbar);
+    const progress = $('progress', toolbar);
+    const percent = $('[data-reading-percent]', toolbar);
+    let progressFrame = null;
+    function updateProgress() {
+      progressFrame = null;
+      if (!article.isConnected || !progress) return;
+      const panel = panels.find(item => !item.hidden);
+      if (!panel) return;
+      const viewport = isWindow ? window.innerHeight : scroller.clientHeight;
+      const origin = isWindow ? 0 : scroller.getBoundingClientRect().top;
+      const top = panel.getBoundingClientRect().top - origin;
+      const distance = panel.getBoundingClientRect().height - viewport + toolbar.offsetHeight;
+      const value = distance <= 0 ? (top < viewport ? 100 : 0) : Math.round(Math.max(0, Math.min(1, (toolbar.offsetHeight - top) / distance)) * 100);
+      progress.value = value;
+      percent.textContent = value + '%';
+    }
+    function scheduleProgress() { if (progressFrame == null) progressFrame = nextFrame(updateProgress); }
+    if (position) position.hidden = false;
+    scroller.addEventListener('scroll', scheduleProgress, {passive: true});
+    window.addEventListener('resize', scheduleProgress);
+    article.addEventListener('load', scheduleProgress, true);
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(scheduleProgress) : null;
+    panels.forEach(panel => observer?.observe(panel));
+    const toolbarTop = () => Math.max(0, toolbar.getBoundingClientRect().top + getTop() - (isWindow ? 0 : scroller.getBoundingClientRect().top));
+    let view = null, generation = 0;
+    article.classList.add('reader-enhanced');
+    tablist.setAttribute('role', 'tablist');
+    tabs.forEach(tab => {
+      tab.setAttribute('role', 'tab');
+      tab.setAttribute('aria-controls', tab.dataset.view);
+    });
+    panels.forEach(panel => {
+      panel.setAttribute('role', 'tabpanel');
+      panel.setAttribute('tabindex', '0');
+      panel.setAttribute('aria-labelledby', 'tab-' + panel.dataset.readerPanel);
+    });
+    function remember() { if (view) memory.positions[view] = getTop(); memory.view = view; }
+    function show(next, {initial = false, updateURL = true} = {}) {
+      if (!['rewrite', 'original'].includes(next) || view === next) return;
+      const thisGeneration = ++generation;
+      if (view) {
+        remember();
+        const old = panels.find(panel => panel.dataset.readerPanel === view);
+        if (old) suspendMedia(old);
+      }
+      view = next;
+      memory.view = next;
+      panels.forEach(panel => {
+        panel.hidden = panel.dataset.readerPanel !== next;
+        if (!panel.hidden) resumeEmbeds(panel);
+        else suspendMedia(panel);
+      });
+      tabs.forEach(tab => {
+        const selected = tab.dataset.view === next;
+        tab.setAttribute('aria-selected', String(selected));
+        tab.setAttribute('tabindex', selected ? '0' : '-1');
+      });
+      if (updateURL) onView(next);
+      const saved = memory.positions[next];
+      // First rewrite starts at its title; first original starts at the visible tab bar.
+      if (!initial || next === 'original' || saved != null) {
+        nextFrame(() => {
+          if (thisGeneration === generation && article.isConnected) setTop(saved ?? toolbarTop());
+        });
+      }
+      scheduleProgress();
+    }
+    tabs.forEach(tab => tab.addEventListener('click', event => {
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      event.preventDefault();
+      show(tab.dataset.view);
+    }));
+    tablist.addEventListener('keydown', event => {
+      const index = tabs.indexOf(document.activeElement);
+      if (index < 0) return;
+      if (event.key === ' ') { event.preventDefault(); show(tabs[index].dataset.view); return; }
+      let target = null;
+      if (event.key === 'ArrowRight') target = tabs[(index + 1) % tabs.length];
+      if (event.key === 'ArrowLeft') target = tabs[(index - 1 + tabs.length) % tabs.length];
+      if (event.key === 'Home') target = tabs[0];
+      if (event.key === 'End') target = tabs.at(-1);
+      if (target) { event.preventDefault(); safeFocus(target); }
+    });
+    show(location.hash === '#original' ? 'original' : 'rewrite', {initial: true, updateURL: false});
+    bindMedia(article);
+    return {show, remember, dispose() {
+      scroller.removeEventListener('scroll', scheduleProgress);
+      window.removeEventListener('resize', scheduleProgress);
+      article.removeEventListener('load', scheduleProgress, true);
+      observer?.disconnect();
+      if (progressFrame != null) cancelAnimationFrame(progressFrame);
+    }};
+  }
+  function replaceViewURL(view) {
+    const url = new URL(location.href);
+    url.hash = view === 'original' ? 'original' : 'rewrite';
+    history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+  }
+  const directArticle = $('.site-main > [data-article-id]');
+  if (directArticle) {
+    const direct = enhanceReader(directArticle, window, replaceViewURL);
+    window.addEventListener('hashchange', () => direct?.show(location.hash === '#original' ? 'original' : 'rewrite', {updateURL: false}));
+    window.addEventListener('pagehide', () => { direct?.remember(); suspendMedia(directArticle); });
+  }
+
+  const sheet = $('#reader-sheet');
+  const grid = $('[data-news-grid]');
+  if (!sheet || !grid) return;
+  const scroll = $('.sheet-scroll', sheet);
+  const closeButton = $('[data-close-sheet]', sheet);
+  const pageRoots = $$('.site-header,.site-main,.site-footer');
+  const listTitle = document.title;
+  const listCanonical = $('link[rel="canonical"]')?.href;
+  const cache = new Map();
+  let active = null, controller = null, viewController = null, sequence = 0;
+  const canAnimate = !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  history.scrollRestoration = 'manual';
+  const sheetState = () => history.state?.xzSheet;
+  const safePath = path => /^\/a\/[a-z0-9-]+\/?$/.test(path);
+  const prefetching = new Map();
+  const readerURLs = new Map($$('[data-open-reader]', grid).map(a => [new URL(a.href, location.href).pathname, a.dataset.readerSrc]));
+  const requestURL = path => readerURLs.get(path) || path;
+  // Warm only a link the reader shows intent to open; never preload media or all stories.
+  function prefetchArticle(event) {
+    if (event.type === 'pointerover' && event.pointerType === 'touch') return;
+    const connection = navigator.connection;
+    if (connection?.saveData || /(^|-)2g$/.test(connection?.effectiveType || '')) return;
+    const anchor = event.target.closest?.('[data-open-reader]');
+    if (!anchor) return;
+    const url = new URL(anchor.href, location.href), path = url.pathname;
+    if (url.origin !== location.origin || !safePath(path) || cache.has(path) || prefetching.has(path) || prefetching.size >= 2) return;
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 8000);
+    const promise = fetch(requestURL(path), {signal: abort.signal, priority: 'low', headers: {'Accept': 'text/html'}})
+      .then(response => { if (!response.ok) throw new Error('Prefetch failed'); return response.text(); })
+      .then(html => {
+        const raw = new DOMParser().parseFromString(html, 'text/html').querySelector('[data-article-id]');
+        if (!raw || '/a/' + raw.dataset.articleId !== path.replace(/\/$/, '')) return null;
+        cache.set(path, html);
+        if (cache.size > 12) cache.delete(cache.keys().next().value);
+        return html;
+      }).catch(() => null).finally(() => { clearTimeout(timer); if (prefetching.get(path)?.promise === promise) prefetching.delete(path); });
+    prefetching.set(path, {promise, abort});
+  }
+  grid.addEventListener('pointerover', prefetchArticle);
+  grid.addEventListener('focusin', prefetchArticle);
+  grid.addEventListener('pointerdown', prefetchArticle);
+  async function readyPrefetch(path) {
+    const pending = prefetching.get(path);
+    if (!pending) return null;
+    let timer;
+    try {
+      // A click is foreground work. Do not inherit an eight-second speculative
+      // request deadline when that request is queued or stalled on a slow link.
+      const ready = await Promise.race([pending.promise, new Promise(resolve => { timer = setTimeout(() => resolve(null), 120); })]);
+      if (!ready) pending.abort.abort();
+      return ready;
+    } finally { clearTimeout(timer); }
+  }
+  function togglePageInert(value) { pageRoots.forEach(element => { element.inert = value; }); }
+  function showSheet(keyboard) {
+    if (sheet.open) return;
+    document.body.classList.add('sheet-open');
+    togglePageInert(true);
+    if (typeof sheet.showModal === 'function') sheet.showModal();
+    else { sheet.setAttribute('open', ''); sheet.classList.add('sheet-fallback'); sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-modal', 'true'); }
+    if (!keyboard && canAnimate && typeof sheet.animate === 'function') {
+      sheet.animate([{transform: 'translateY(16px)', opacity: .8}, {transform: 'translateY(0)', opacity: 1}], {duration: 180, easing: 'cubic-bezier(.23,1,.32,1)'});
+    }
+    safeFocus(closeButton);
+  }
+  function loading() {
+    scroll.setAttribute('aria-busy', 'true');
+    scroll.innerHTML = '<div class="sheet-status" role="status"><p>正在打开文章…</p><div aria-hidden="true"><div class="skeleton-title"></div><div class="skeleton-title short"></div><div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div></div>';
+    scroll.scrollTop = 0;
+  }
+  function errorState(path, sourceURL) {
+    scroll.removeAttribute('aria-busy');
+    scroll.replaceChildren();
+    const status = document.createElement('section'); status.className = 'sheet-status'; status.setAttribute('role', 'alert');
+    const title = document.createElement('h2'); title.textContent = '文章暂时未能打开';
+    const description = document.createElement('p'); description.textContent = '选刊和阅读位置都还在。可以重试，或打开独立文章页。';
+    const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'retry-button'; retry.textContent = '重试'; retry.addEventListener('click', () => loadArticle(path, sourceURL));
+    const link = document.createElement('a'); link.href = path; link.textContent = '独立文章页 ↗';
+    status.append(title, description, retry, link);
+    if (sourceURL) { const source = document.createElement('a'); source.href = sourceURL; source.target = '_blank'; source.rel = 'noopener noreferrer'; source.textContent = '去原文 ↗'; status.append(source); }
+    scroll.append(status);
+  }
+  async function loadArticle(path, sourceURL = '') {
+    if (!safePath(path)) return;
+    const ownSequence = ++sequence;
+    controller?.abort();
+    viewController?.remember(); viewController?.dispose(); viewController = null;
+    suspendMedia(scroll);
+    loading();
+    controller = new AbortController();
+    const signal = controller.signal;
+    const timeout = setTimeout(() => controller?.signal === signal && controller.abort(), 12000);
+    try {
+      let html = cache.get(path) || await readyPrefetch(path);
+      if (ownSequence !== sequence || !active) return;
+      if (signal.aborted) throw new Error('Article load timed out');
+      if (!html) {
+        const response = await fetch(requestURL(path), {signal, priority: 'high', headers: {'Accept': 'text/html'}});
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        html = await response.text();
+      }
+      if (ownSequence !== sequence || !active) return;
+      const parsed = new DOMParser().parseFromString(html, 'text/html');
+      const raw = $('[data-article-id]', parsed);
+      if (!raw || '/a/' + raw.dataset.articleId !== path.replace(/\/$/, '')) throw new Error('Article mismatch');
+      cache.set(path, html);
+      if (cache.size > 12) cache.delete(cache.keys().next().value);
+      const article = document.importNode(raw, true);
+      // Set panel visibility before attaching media to the live document.
+      viewController = enhanceReader(article, scroll, view => {
+        replaceViewURL(view);
+        $('[data-sheet-permalink]', sheet).href = location.pathname + location.search + location.hash;
+      });
+      scroll.replaceChildren(article);
+      scroll.removeAttribute('aria-busy');
+      document.title = parsed.title;
+      $('link[rel="canonical"]')?.setAttribute('href', location.origin + path);
+      $('[data-sheet-permalink]', sheet).href = path + location.hash;
+      nextFrame(() => { if (ownSequence === sequence) bindMedia(article); });
+    } catch (error) {
+      if (ownSequence !== sequence || !active) return;
+      errorState(path, sourceURL);
+    } finally { clearTimeout(timeout); }
+  }
+  function openFromCard(anchor, keyboard) {
+    const url = new URL(anchor.href, location.href);
+    if (url.origin !== location.origin || !safePath(url.pathname)) return false;
+    const state = {path: url.pathname, listURL: location.pathname + location.search + location.hash, listY: window.scrollY, focusId: anchor.id, sourceURL: anchor.dataset.sourceUrl || ''};
+    history.replaceState({...history.state, xzList: {url: state.listURL, y: state.listY, focusId: state.focusId}}, '', location.href);
+    history.pushState({xzSheet: state}, '', url.pathname);
+    active = state;
+    $('[data-sheet-permalink]', sheet).href = url.pathname;
+    showSheet(keyboard);
+    loadArticle(state.path, state.sourceURL);
+    return true;
+  }
+  function finishClose() {
+    const previous = active;
+    ++sequence;
+    controller?.abort(); controller = null;
+    viewController?.remember(); viewController?.dispose(); viewController = null;
+    suspendMedia(scroll);
+    if (typeof sheet.close === 'function' && sheet.open) sheet.close();
+    sheet.removeAttribute('open'); sheet.classList.remove('sheet-fallback');
+    togglePageInert(false);
+    document.body.classList.remove('sheet-open');
+    scroll.replaceChildren(); scroll.removeAttribute('aria-busy');
+    active = null;
+    document.title = listTitle;
+    if (listCanonical) $('link[rel="canonical"]')?.setAttribute('href', listCanonical);
+    nextFrame(() => {
+      if (active) return;
+      window.scrollTo(0, previous?.listY ?? history.state?.xzList?.y ?? 0);
+      safeFocus(document.getElementById(previous?.focusId || history.state?.xzList?.focusId || '') || $('.edition-line h1'));
+    });
+  }
+  function requestClose() {
+    if (!active) return;
+    if (sheetState()) history.back(); else finishClose();
+  }
+  grid.addEventListener('click', event => {
+    const anchor = event.target.closest('[data-open-reader]');
+    if (!anchor || event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+    if (openFromCard(anchor, event.detail === 0)) event.preventDefault();
+  });
+  closeButton.addEventListener('click', requestClose);
+  sheet.addEventListener('cancel', event => { event.preventDefault(); requestClose(); });
+  sheet.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { event.preventDefault(); requestClose(); return; }
+    if (event.key !== 'Tab') return;
+    const focusables = $$('a[href],button:not(:disabled),[tabindex="0"],video[controls],audio[controls]', sheet).filter(element => !element.closest('[hidden]'));
+    const first = focusables[0], last = focusables.at(-1);
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === sheet)) { event.preventDefault(); safeFocus(last); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); safeFocus(first); }
+  });
+  window.addEventListener('popstate', () => {
+    const state = sheetState();
+    if (state && safePath(state.path)) {
+      active = state;
+      showSheet(true);
+      loadArticle(state.path, state.sourceURL);
+    } else if (active) finishClose();
+  });
+  window.addEventListener('pagehide', () => { viewController?.remember(); suspendMedia(scroll); controller?.abort(); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,960 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>以太坊后量子签名聚合实测：哈希折叠打不过 leanVM 递归，换个叶子大小就把延迟降了 28% · 新知</title><meta name="robots" content="noindex"></head><body><article class="article-reader" data-article-id="leanvm-pq-aggregation-folding-negative-results">
+<a class="article-back" href="/">← 返回选刊</a>
+<header class="article-header"><p class="article-kicker">arianaraghi (aryaethn) / 文章</p><h1>以太坊后量子签名聚合实测：哈希折叠打不过 leanVM 递归，换个叶子大小就把延迟降了 28%</h1><p class="article-dek">ethresear.ch 上的一份测量报告：在 8 GB M2 上，三种基于哈希的累积方案和一种批处理设计都没胜过 leanVM 的完整验证器递归；真正起作用的是让合并节点停在 mu 25。</p><div class="article-meta"><time datetime="2026-11-11">本站收录 2026年11月11日 · 周三</time><span>原文发布 2026年11月8日 · 周日</span><span>原作者：arianaraghi (aryaethn)</span><span>中文改写：<a href="/about">新知</a></span><span>Web3 · 以太坊 · 后量子 · 零知识证明</span></div></header>
+<nav class="reader-tabs" aria-label="文章版本与来源"><div data-tabs><a href="#rewrite" id="tab-rewrite" data-view="rewrite">中文改写</a><a href="#original" id="tab-original" data-view="original">原文</a></div><a class="reader-source" href="https://ethresear.ch/t/folding-vs-full-verifier-recursion-for-pq-signature-aggregation-in-leanvm-measurements-and-negative-results/26227" target="_blank" rel="noopener noreferrer">原文链接 ↗</a><div class="reading-position" hidden><progress max="100" value="0" aria-label="当前版本阅读进度"></progress><span data-reading-percent aria-hidden="true">0%</span></div></nav>
+<section class="reader-panel" id="rewrite" data-reader-panel="rewrite" aria-label="中文改写"><h2 class="section-heading">中文改写</h2><div class="prose"><p>在一台 8 GB 内存的 M2 笔记本上，基于哈希的累积（accumulation）方案没能在聚合器内部打败 leanVM 现有的“完整验证器递归”。作者团队自己设计的最佳批处理方案，在把叶子大小调好之后，也没有达到事先定下的 15% 门槛。这是 ethresear.ch 上一篇关于 Lean Ethereum 后量子签名聚合的测量报告，作者用 arianaraghi 账号发布，正文以“我们”自称。报告里每个数字都标了证据等级：Verified（实测或从源码核实）或 Inferred（推算）。下文保留这一区分，分别写作“实测”和“推算”。</p>
+<h2>要回答的问题和实验环境</h2>
+<p>作者想弄清楚：在后量子签名聚合中，基于哈希的累积（WARP、Arc）是否在某个地方胜过 leanVM 的完整验证器递归，如果有，是在哪里。他们统计了 CPU 时间、slot 截止时刻的延迟、内存和数据搬运量。</p>
+<p>Lean Ethereum 用 leanXMSS 签名替换 BLS 签名，再用 leanVM 证明来聚合这些签名。草案 EIP-8292 定义了叶子聚合、递归合并，以及每个聚合体约 256 KiB 的 gossip 目标大小。</p>
+<p>以太坊基金会 Coratger 和 Setty 的设计研究对比了两条路径：路径 A 在 zkVM 里运行完整验证器；路径 B 先折叠（folding），再证明一个判定器（decider）。那份研究没有给出数字。作者没有找到公开的 Arc 实现；WARP 有研究代码（compsec-epfl/warp），他们在本地跑了。</p>
+<p><strong>范围限定在单个聚合器内部。</strong> 累积器必须携带自己的见证（witness）：一个 1500 签名的叶子约有 1 GiB 的已承诺字（committed words），而一份 leanVM 证明只有 265 KiB。因此 gossip 的每一跳仍然要用递归，累积只能替代同一台机器上已经持有的证明之间的递归。</p>
+<p><strong>实验配置（实测）：</strong></p>
+<ul>
+<li>leanVM：leanEthereum/leanMultisig（后更名为 leanVM），commit df7d122，用 rustc 1.99.0 编译。二元塔域 GF(2^64)，挑战值在 GF(2^192) 中；哈希用 Keccak-256；WHIR 采用 Ligerito 形式，每份证明对一个堆叠承诺做开启。</li>
+<li>机器：Apple M2 MacBook Air，8 核（4 个性能核、4 个能效核），8 GB 内存，无风扇，macOS 26.5.2。作者把它当作低端聚合器。计时期间后台交换（swap）为 1.4 到 1.8 GiB，部分配置的运行间噪声可达 10% 到 15%。</li>
+<li>负载：每个叶子 250 到 350 个 leanXMSS 签名，码率 1/4；以 n 合 1 的方式合并，外层码率 1/4。合并证明大小为 218 到 248 KiB。</li>
+<li>指标：截止延迟 = 最后一个叶子 + 合并；每 slot 的 CPU 时间 = n × 叶子 + 合并。</li>
+<li>可迁移性：周期数、表大小和已承诺字数是精确值，与平台无关；时间只在这台机器上作为比值才有意义。</li>
+</ul>
+<h2>基线，以及在合并中验证一个子证明要花多少</h2>
+<p>在合并中验证一个 250 签名的子证明需要 18.68 万个 VM 周期，其中该子证明的 WHIR 开启占 55%（实测）。</p>
+<p><strong>基线数据（实测）：</strong></p>
+<ul>
+<li>叶子聚合：N 个 leanXMSS 签名约需 18.5k + 805.7 N 个周期，每个签名 186.5 次 Keccak 调用。N = 1500 时与 README 完全吻合：1,227,023 个周期，2^26.993 个已承诺字，证明 265.1 KiB。</li>
+<li>合并：n 个基于 250 签名叶子的子证明，约需 19.4k + 186.8k n 个周期。README 中 2 合 1 递归的数字（542,049 个周期）没有复现出来，作者在 900 签名叶子上测得 438,675。</li>
+<li>M2 上的耗时：一个 250 签名的叶子约 1.0 秒证明完；mu 25 的合并按每个已承诺字 35 到 44 纳秒的速度证明。</li>
+<li>目前没有批处理：合并程序（merge guest）对每个子证明的堆叠承诺都完整运行一次五层 WHIR 开启。</li>
+</ul>
+<p>合并程序内部，每个子证明的成本构成如下（实测；精确的性能剖析归因，250 签名叶子，码率 1/4）：</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>组成部分</th>
+<th>每个子证明的周期数</th>
+<th>占比</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>WHIR 开启，第 0 层</td>
+<td>56,931.5</td>
+<td>30.5%</td>
+</tr>
+<tr>
+<td>WHIR 开启，第 1 层</td>
+<td>18,815.5</td>
+<td>10.1%</td>
+</tr>
+<tr>
+<td>WHIR 开启，第 2 到 4 层、尾部和初始化</td>
+<td>27,375.5</td>
+<td>14.7%</td>
+</tr>
+<tr>
+<td>Keccak GKR</td>
+<td>35.8k</td>
+<td>19.2%</td>
+</tr>
+<tr>
+<td>表 sumcheck</td>
+<td>12.1k</td>
+<td>6.5%</td>
+</tr>
+<tr>
+<td>终端权重</td>
+<td>11.3k</td>
+<td>6.0%</td>
+</tr>
+<tr>
+<td>Bus GKR</td>
+<td>9.6k</td>
+<td>5.1%</td>
+</tr>
+<tr>
+<td>环切换与声明批处理</td>
+<td>6.1k</td>
+<td>3.3%</td>
+</tr>
+<tr>
+<td>其他（余项，推导得出）</td>
+<td>约 8.8k</td>
+<td>4.7%</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td><strong>186,807.5</strong></td>
+<td><strong>100%</strong></td>
+</tr>
+</tbody>
+</table>
+<p>码率 1/4 下的 WHIR 层级依次按 6、4、4、4、4 折叠，各层查询数为 112、45、28、21、16，每层 17 位 grinding。</p>
+<p><strong>两点观察（实测）：</strong></p>
+<ul>
+<li>Merkle 哈希只占每个子证明周期数的 12.4%，却占其 5188 次 Keccak 调用的 78.7%。换哈希函数对 Keccak 调用次数的影响会远大于对周期数的影响。</li>
+<li>每个子证明有 12,665 行 JUMP。其中 9300 行（73%）来自 <code>assert_in_k</code> 子域（打包）检查，1488 行来自运行时 <code>match</code> 分派，循环只占 567 行，所以循环展开没法把这张表缩小多少。</li>
+</ul>
+<h2>三种基于哈希的累积方案都输了</h2>
+<p>作者核算了三种累积设计，在聚合器内部没有一种胜过递归，而且差距都不是调参能弥补的。</p>
+<p><strong>D1：直接折叠签名验证（WARP 风格的 PESAT / R1CS）。</strong> 一次 leanXMSS 验证要执行 186 次 Keccak-f 置换，按比特级编码至少需要 710 万个 R1CS 约束（推算）。WARP 研究代码在这台机器上、Goldilocks 域上实测的边际证明速度约为每个约束 0.26 微秒，折合每个签名约 1.9 秒。leanVM 每个签名约 4.1 毫秒，所以 D1 慢约 450 倍（由实测速率推算）。即使按理想的 64 路比特打包，也还要约 29 毫秒，仍慢 7 倍。</p>
+<p><strong>D2：折叠整个 leanVM 步骤关系。</strong> WARP 证明器的成本约为每个见证元素 260 纳秒，leanVM 证明整个叶子约为每个已承诺字 55 纳秒，两者都在 M2 上实测。这 4.7 倍的差距，还是在把 bus 和 Keccak GKR 论证表达成 PESAT、以及加上最终判定器之前的数字（推算）。</p>
+<p><strong>D3-S：跨合并累积子证明的 WHIR 邻近性声明。</strong> 一个子证明的第 0 层开启在电路内约需 5.7 万个周期，第 1 层及以上约需 4.6 万个（实测）。每一步累积都必须在第 0 层重新开启自己的累积器，相当于花约 5.7 万个周期，去推迟最多 4.6 万个周期的工作，所以每个子证明都亏（由实测计数推算）。</p>
+<p><strong>WARP 参考数据（实测）。</strong> WARP 研究代码在 commit 655e7d5 上，于 BLS12-381 标量域累积 8 个实例、M = 2^16 时：证明 1.16 秒，验证 1.48 毫秒，判定 141 毫秒，证明大小 189 KB。</p>
+<p>WARP 需要大域，而 leanVM 的见证位于 GF(2^64)，挑战值在 GF(2^192)。WARP 的作者把小域上的线性时间折叠列为未解决问题。</p>
+<p>作者在初版中还提到，运行 WARP 研究代码时发现了一个他们认为重要的实现问题，已私下报告给 WARP 作者，待对方回复后再公开说明，并预计它不会改变上面的 WARP 速率（推算）。这个问题后来在 11 月 9 日的更新中公开，见文末。</p>
+<h2>批处理子证明的开启（B'-L1）：省了 17.6%，整体仍慢 2.4%</h2>
+<p>所有子证明从第 1 层开始共用一次 WHIR 开启，每个子证明可省 32.8k 个周期（17.6%）。但在 1500 个签名的规模下，它在截止延迟上比基线的最佳配置慢 2.4%。</p>
+<p><strong>设计：</strong></p>
+<ul>
+<li>每个叶子照常运行自己的 WHIR 第 0 层轮次，然后停下，保留第 1 层的码字。</li>
+<li>合并时照常验证每个子证明的第 0 层轮次。</li>
+<li>然后对一个虚拟码字做一次开启：把各子证明的第 1 层码字作为额外的交织行堆叠起来，并增加 k = ceil(log2 n) 个折叠变量。</li>
+<li>从第 1 层开始，查询数和 17 位 grinding 都不变。作者用 leanVM 自己的参数搜索核对过这一点。</li>
+</ul>
+<p><strong>可靠性草证（推算，不是证明）。</strong> 把整个合并看作一个 IOP：先是 n 个子证明前缀，再接一个用 BCS 编译的批处理后缀。批处理的 transcript 以每个子证明的陈述、根和声明作为种子。在以下三个条件成立时，每一次逐轮转移都能保持 leanVM 原有的单次转移界，或者更强：</p>
+<ol>
+<li>堆叠后的第 1 层码字作为一个交织码字来分析，其 Johnson 列表大小 L1 与字母表无关；</li>
+<li>折叠 2^(4+k) 行时，使用 leanVM 已经依赖的互相关一致性结果（Jo 2026/891，定理 4.4），其误差与行数无关；</li>
+<li>批处理挑战 β 只在吸收了所有子证明的根和声明之后才抽取。</li>
+</ol>
+<p>唯一新增的转移是 β。与堆叠码字在一个公共大集合上一致的元组，其每个子分量都落在对应子证明自己的列表中；因此对联合列表中的每个元组（至多 L1 个），组合后的声明误差都是 β 的非零多线性多项式。对联合列表做并集界，得到：</p>
+<p><code>Pr[escape at β] ≤ k·L1/|E| ≈ 2^(1.6 + 9.4 - 192) = 2^-181（k = 3）</code></p>
+<p>容易踩的坑是对各子证明的列表分别做并集：那样会得到 L1^n 个元组，在 n = 8 时只有约 2^-114，低于 128 位的安全目标。</p>
+<p><strong>实测成本。</strong> 作者精确模拟的是成本，不是可靠性。他们做了一个“不可靠”（UNSOUND）的合并程序变体 V6：在共享位置上做每个子证明的第 1 层 Merkle 开启，加入批处理 transcript、k 个额外折叠轮次和每个子证明的组合计算，在本该由批处理提供真实值的地方填入占位值。</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>指标</th>
+<th>数值</th>
+<th>证据等级</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>每个子证明节省的周期</td>
+<td>32,835（占 186,873 的 17.6%）</td>
+<td>实测（n = 2 到 8 的斜率）</td>
+</tr>
+<tr>
+<td>每个子证明新增的工作</td>
+<td>511.5 个周期</td>
+<td>实测（性能剖析）</td>
+</tr>
+<tr>
+<td>每个子证明节省的 Keccak 调用</td>
+<td>至少 1134 次（约 22%）</td>
+<td>实测（早期变体）</td>
+</tr>
+<tr>
+<td>叶子节省的时间（第 1 到 4 层不再运行）</td>
+<td>0.103 秒</td>
+<td>由实测 trace 区间推算</td>
+</tr>
+<tr>
+<td>截止时刻的原生批处理开启器</td>
+<td>0.11 秒</td>
+<td>推算</td>
+</tr>
+<tr>
+<td>每个子证明需保留到截止时刻的第 1 层数据</td>
+<td>约 0.45 GiB</td>
+<td>推算</td>
+</tr>
+</tbody>
+</table>
+<p><strong>门槛结果。</strong> 计时之前，作者先定好了规则：在 1500 个签名下，双方各取截止延迟更低的那个配置进行比较，B'-L1 必须把截止延迟或每 slot CPU 时间至少降低 15%。</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>配置</th>
+<th>方案</th>
+<th>合并 mu</th>
+<th>叶子（秒）</th>
+<th>合并（秒）</th>
+<th>截止延迟（秒）</th>
+<th>每 slot CPU（秒）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6 x 250</td>
+<td>基线</td>
+<td>26</td>
+<td>0.976</td>
+<td>2.132</td>
+<td>3.108</td>
+<td>7.988</td>
+</tr>
+<tr>
+<td>6 x 250</td>
+<td>B'-L1</td>
+<td>25</td>
+<td>0.873</td>
+<td>1.305</td>
+<td>2.288</td>
+<td>6.653</td>
+</tr>
+<tr>
+<td>5 x 300</td>
+<td>基线</td>
+<td>25</td>
+<td>1.059</td>
+<td>1.176</td>
+<td><strong>2.235</strong></td>
+<td>6.471</td>
+</tr>
+<tr>
+<td>5 x 300</td>
+<td>B'-L1</td>
+<td>25</td>
+<td>0.956</td>
+<td>1.235</td>
+<td>2.301</td>
+<td>6.125</td>
+</tr>
+</tbody>
+</table>
+<p>叶子和合并时间是 6 次运行的合并中位数（实测）。B'-L1 各行在每个叶子上减去 0.103 秒，并加上 0.11 秒的开启器时间。</p>
+<p>双方最佳配置对比（基线 5 x 300，B'-L1 6 x 250）：B'-L1 的截止延迟慢 2.4%，CPU 多用 2.8%。在最有利的假设下（开启器零成本、叶子节省取最大值、合并时间采用下一节的通道模型），收益至多是截止延迟 11.4%、CPU 10.5%（推算）。</p>
+<p>如果固定在 6 x 250，B'-L1 确实把截止延迟降低了 26%。但这部分收益几乎全部来自让节点停留在 mu 25，而基线只要选更大的叶子，就能更便宜地做到这一点。</p>
+<h2>决定合并耗时的，是已承诺大小和 mu 的跳变</h2>
+<p>在这台机器上，合并的证明时间由两件事决定：同一个 mu 内的已承诺通道数，以及节点从 mu 25 跨到 mu 26 时的一次大幅跳升（实测）。</p>
+<p><strong>leanVM 如何确定承诺大小</strong>（从 df7d122 源码核实）。每张表都补齐到 2 的幂，堆叠后的见证大小为：</p>
+<p><code>TC = 4·2^h + 2^k_bc + 2^(6+τ_K) + Σ_t w_t·2^τ_t，其中 τ_t = ceil(log2 rows_t)，μ = max(ceil(log2 TC), 15)</code></p>
+<ul>
+<li>宽度 w：XOR、MUL、DEREF 为 15，SET 为 8，JUMP 为 14，KECCAK 为 26。</li>
+<li>其他项：h 是内存高度，k_bc 是字节码计数器高度。</li>
+<li>通道：证明器只承诺 ceil(TC / 2^(mu-6)) 条、每条 2^(mu-6) 个字的通道，从不编码尾部的零。</li>
+<li>校验：作者检查的 8 次运行中，用精确行数重算的 TC 都与程序打印值一致。</li>
+</ul>
+<p><strong>mu 25 节点的容量（实测）。</strong> 某张表的行数一旦跨过 2 的幂，就会一次性增加 w × 2^τ 个字，所以容量是阶梯式的。</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>叶子大小（签名数）</th>
+<th>基线在 mu 25 下可容纳的子证明数</th>
+<th>B'-L1 在 mu 25 下可容纳的子证明数</th>
+<th>首次进入 mu 26 的扇入</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>250</td>
+<td>5</td>
+<td>6</td>
+<td>基线为 6：JUMP 超过 2^16 行（+14 × 2^16 个字）；B'-L1 为 7：内存超过 2^21</td>
+</tr>
+<tr>
+<td>350</td>
+<td>5（恰好 2^25 个字）</td>
+<td>6</td>
+<td>基线 6；B'-L1 7</td>
+</tr>
+</tbody>
+</table>
+<p>能停留在 mu 25 的最大叶子是 350 个签名，375 个签名的叶子就是 mu 26；作者以 25 为步长测试。</p>
+<p><strong>mu 26 的额外代价（本机实测）。</strong> 两组近似受控的对比显示了这次跳升：</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>对比组</th>
+<th>mu 25 运行</th>
+<th>mu 26 运行</th>
+<th>已承诺字数</th>
+<th>时间比</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>基线，各 6 次</td>
+<td>5 x 300：1.176 秒</td>
+<td>6 x 250：2.132 秒</td>
+<td>33.55M 对 34.60M</td>
+<td>1.81</td>
+</tr>
+<tr>
+<td>基线，各 1 次</td>
+<td>5 x 350：1.163 秒</td>
+<td>6 x 350：1.637 秒</td>
+<td>33.55M 对 34.60M</td>
+<td>1.41</td>
+</tr>
+</tbody>
+</table>
+<p>已承诺字数只多了约 3%，耗时却是原来的 1.4 到 1.8 倍。第一组的分阶段归因如下（各做 2 次带 trace 的证明；区间为实测，原因为推算）：</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>阶段</th>
+<th>mu 25（毫秒）</th>
+<th>mu 26（毫秒）</th>
+<th>比值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>WHIR 迭代，第 0 到 3 层</td>
+<td>240.1</td>
+<td>529.7</td>
+<td>2.21</td>
+</tr>
+<tr>
+<td>承诺（编码与 Merkle）</td>
+<td>365.5</td>
+<td>625.5</td>
+<td>1.71</td>
+</tr>
+<tr>
+<td>Bus（GKR 以外部分）</td>
+<td>63.2</td>
+<td>203.5</td>
+<td>3.22</td>
+</tr>
+<tr>
+<td>执行</td>
+<td>41.1</td>
+<td>130.9</td>
+<td>3.18</td>
+</tr>
+<tr>
+<td>Bus GKR</td>
+<td>94.8</td>
+<td>132.5</td>
+<td>1.40</td>
+</tr>
+<tr>
+<td>Keccak 归约</td>
+<td>168.5</td>
+<td>192.5</td>
+<td>1.14</td>
+</tr>
+<tr>
+<td>表 sumcheck、环切换、见证构建、尾部</td>
+<td>139.4</td>
+<td>147.2</td>
+<td>1.06</td>
+</tr>
+<tr>
+<td>各阶段合计</td>
+<td>1,112.6</td>
+<td>1,961.8</td>
+<td>1.76</td>
+</tr>
+</tbody>
+</table>
+<p>Prove 区间的总时长分别为 1130 毫秒和 1975 毫秒。</p>
+<p>作者对归因的解读（推算）：结构性的部分约 290 毫秒，因为 WHIR 第一次折叠之后的所有计算都作用于 2^(mu-6) 个元素的对象，WHIR 这几行翻倍在意料之中。剩下的部分看起来是内存成本：承诺阶段按通道数乘以每通道编码长度（33 × 2^22 × 22 对 64 × 2^21 × 21）应当只增长约 8%，实际增长了 71%；bus 和执行阶段增长超过 3 倍，而周期数只增长了 19%。作者把约 500 毫秒的超出部分解读为内存系统的成本：在 8 GB 的机器上占用 3.1 GB，并且完整码字都放在内存里（这是 leanVM 在 Apple 芯片上的 store 模式）。更大的机器上，这个额外代价可能更接近结构性的 0.3 秒，但作者没有条件测试。</p>
+<p><strong>配置规则：</strong> 在这类硬件上，选择叶子大小和扇入时，要让合并节点停留在 mu 25。mu 25 的叶子最多 350 个签名，一个基线 mu 25 节点最多容纳 5 个子证明，也就是 1750 个签名。对 1500 个签名，用 5 x 300 代替 6 x 250，截止延迟从 3.11 秒降到 2.24 秒（降低 28%），每 slot CPU 时间从 7.99 秒降到 6.47 秒（降低 19%），不需要任何协议改动（输入数据为实测）。</p>
+<p><strong>对拓扑工具的启示（推算）。</strong> 一个对扇入和叶子大小呈线性的成本模型，会把 mu 的阶梯抹平。leanBench 的拓扑探索器用的就是这种按机器拟合的线性模型。这类模型会高估刚好低于 mu 边界的合并、低估刚好高于边界的合并，在这台机器上误差可达约 0.5 到 1 秒。考虑阶梯的模型可以用上面的 TC 公式：逐表统计行数，各自补齐，求和，再按每条已承诺通道计费，并加上一个与 mu 相关的项。</p>
+<h2>批处理还可能在哪里有用</h2>
+<p>B'-L1 能让一个 mu 25 节点多容纳一个子证明，所以它只对需要合并的签名数超过基线 mu 25 节点容量的聚合器有帮助（推算）。</p>
+<ul>
+<li>适用窗口是 1751 到 2100 个签名。叶子最多 350 个签名时，基线 mu 25 节点最多 1750 个签名，B'-L1 节点最多 2100 个。在这个区间，B'-L1 可以避开 mu 26 的额外代价，在这台机器上价值约 0.5 到 1.0 秒。</li>
+<li>内存对它不利。B'-L1 每个子证明要保留约 0.45 GiB 的第 1 层数据直到截止时刻。6 个子证明加一个 350 签名的叶子（占用 3.3 GB），超过 8 GB 机器内存的 70%。</li>
+<li>采用它的成本是实打实的：需要部分叶子证明、新的批处理开启器、合并程序改动，以及完整的可靠性证明。</li>
+<li>作者假设的负载低于这个窗口：每个聚合器 512 和 1500 个签名。如果委员会规模让单个聚合器超过 1750 个签名，这种情形就有意义了，上面的设计和可靠性草证可以作为起点。</li>
+</ul>
+<h2>局限</h2>
+<ul>
+<li>只有一台机器：8 GB 无风扇 M2，后台 swap 1.4 到 1.8 GiB，部分配置有 10% 到 15% 的噪声。B'-L1 的结论在这个噪声下依然成立，但 mu 26 额外代价的大小未必适用于其他硬件。</li>
+<li>只有一个 commit：leanVM df7d122（2026 年 11 月 6 日）。它计划中的哈希更换、RISC-V 指令集和零知识，都会改变这些数字。</li>
+<li>B'-L1 只做了成本模拟，没有真正实现。V6 程序按构造就是不可靠的：使用占位值，共享位置不受约束。它的叶子节省来自原生 trace 区间，开启器成本是估计值。</li>
+<li>可靠性论证只是逐轮界的草证，不是证明。它假设 leanVM 自身的参数体系如其声称的那样可靠：Johnson 界、每次转移 128 位、17 位 grinding。</li>
+<li>D1 和 D2 的速率依赖 WARP 的素域研究代码。二元域或小域上的折叠方案可能改变这些常数，但不影响 D3-S 的论证。</li>
+<li>不在范围内：跨 gossip 跳的递归，以及零知识。</li>
+</ul>
+<h2>作者向读者提出的问题</h2>
+<ol>
+<li>问 leanVM 开发者：mu 26 时承诺、bus 和执行时间的跳升是否符合预期？在内存更大的机器上，rebuild 模式（REBUILD_OVER_STORE）会不会改变这一点？（抄送 @tcoratger）</li>
+<li>关于子域检查：<code>assert_in_k</code> 检查（每个子证明 9300 行 JUMP）能否安全地批处理？随机 K 线性组合每次重复只能提供约 64 位安全性。（抄送 Tom Wambsgans）</li>
+<li>问以太坊基金会 / leanSpec：应该以什么聚合间隔、每个聚合器多少签名为目标？作者假设的是 1、2 或 4 秒的间隔，512 或 1500 个签名。</li>
+<li>关于路径 B：在二元域重写之后，折叠还在考虑之中吗？用于聚合树的哪一跳？（抄送 @tcoratger）</li>
+<li>问 leanBench 维护者：拓扑探索器是否需要一个考虑阶梯的成本模型（见上文 mu 跳变一节）？（@unnawut）</li>
+<li>更大的机器：有大型 Linux 机器的人，可以用作者提供的脚本重跑配置对比。</li>
+</ol>
+<h2>相关工作</h2>
+<p>作者没有找到在一个递归节点的多个子证明之间批处理 WHIR 或 FRI 开启的已有工作，也没有找到用表补齐来建模聚合树成本的工作。这一结论基于截至 2026 年 11 月 8 日对下列来源的定向检索，不是穷尽式综述。</p>
+<ul>
+<li>基于哈希的累积：<a href="https://eprint.iacr.org/2024/474" rel="noopener noreferrer">Accumulation Without Homomorphism</a>（有界深度，适用任意线性码）；<a href="https://eprint.iacr.org/2024/1731" rel="noopener noreferrer">Arc</a>（无界深度，累积 Reed-Solomon 邻近性声明，几乎可以直接替换基于 IOP 的 PCD）；<a href="https://eprint.iacr.org/2025/753" rel="noopener noreferrer">WARP</a>（线性时间证明器，直线式提取）。D3-S 就是作者对 Arc 式用法在 leanVM 内部的成本检验。WARP 作者的演讲中提到了 FACS，但作者没有找到对应论文。</li>
+<li>小域和二元域上的折叠：WARP 作者把小域上的线性时间折叠列为未解决问题。Neo、SuperNeo 和 PikkuFold 基于格。Accordion 用 KZG 判定器做批量折叠，因此不是后量子安全的。</li>
+<li>带延迟声明的二元域递归：一个<a href="https://github.com/Plonky3/Plonky3/pull/2533" rel="noopener noreferrer">已关闭的 Plonky3 拉取请求</a>（2026 年 10 月，之后移到了单独的仓库）在二元域上递归 Flock 证明。每个节点把内层电路的矩阵求值作为公开声明延迟处理，同一矩阵上的声明在子证明之间折叠，根节点对每个只求值一次。它延迟的对象和 B'-L1 不同：是矩阵求值声明，而非多项式承诺方案的邻近性开启。它的 2 合 1 XMSS 节点在 Ryzen 9 9950X3D 上用 8 线程耗时 36.9 秒，所以目前不能作为 leanVM 延迟的比较对象。</li>
+<li>单个证明内部的批量开启：在共享查询位置上开启多个已承诺预言机是标准做法，例如 <a href="https://docs.rs/crate/plonky2/latest/source/plonky2.pdf" rel="noopener noreferrer">Plonky2</a> 中的批量 FRI、<a href="https://github.com/yetanotherco/lambda_vm/pull/994" rel="noopener noreferrer">近期 STARK 证明器</a>中按高度分组并共享查询索引的 FRI、<a href="https://eprint.iacr.org/2026/2330" rel="noopener noreferrer">Ziren</a> 中对多个承诺做一次 WHIR 开启。B'-L1 把同样的思路用在一个递归节点的多个子证明之间，从第 1 层开始。</li>
+<li>聚合拓扑：<a href="https://github.com/leanEthereum/leanBench" rel="noopener noreferrer">leanBench</a> 在码率 1/4 下，测量扇入为 2、4、8，叶子为 125、250、500 个签名的 leanVM 聚合树。它的<a href="https://bench.leanroadmap.org/topology.html" rel="noopener noreferrer">拓扑探索器</a>用按机器拟合的线性模型预测可行性，上文的分析表明这类拟合会漏掉 mu 阶梯。一份<a href="https://hackmd.io/@goatresearch/H1G2tOCwGx" rel="noopener noreferrer">以太坊后量子共识综述</a>（2026 年 8 月）把最优聚合树构造列为未解决问题。</li>
+<li>基于哈希的 SNARK 递归的可靠性：基于直线式提取器的 PCD；基于算术化随机预言机的 PCD；随机预言机模型中相对化简洁论证的不可能性。</li>
+<li>问题框架：本文测量的问题，正是 Coratger 和 Setty 的以太坊基金会设计研究（路径 A 对路径 B）提出的。</li>
+</ul>
+<h2>可复现性</h2>
+<p>文中每个数字都记录了 leanVM commit（df7d122abbe25cf12e5c8ae992ce6d3505f75372）、命令行、重复次数，以及是否为中位数。</p>
+<ul>
+<li>测量分支：对合并程序（crates/rec_aggregation/guests/lean_ethereum.py）的本地修改，外加一个由环境变量控制的表格打印。那些“不可靠”变体只用于统计成本。</li>
+<li>合并计时：<code>leanvm recursion --n &lt;n&gt; --xmss-per-leaf &lt;N&gt; --leaf-log-inv-rate 2 --log-inv-rate 2 --repeat 3 --tracing</code>，每次间隔 30 秒休眠，交替跑两轮。</li>
+<li>叶子计时：<code>leanvm aggregate --xmss &lt;N&gt; --log-inv-rate 2 --repeat 3</code>。</li>
+<li>脚本、diff 和日志：<a href="https://github.com/aryaethn/leanvm-accum-study" rel="noopener noreferrer">aryaethn/leanvm-accum-study</a>。其中包含全部 10 个测量分支相对 df7d122 的 diff、脚本、解析后的表格和计时运行的原始日志，解析器可以从日志逐字节重新生成计时表和分阶段表。</li>
+</ul>
+<h2>11 月 9 日更新：WARP 参考代码的修复</h2>
+<p>上文的 WARP 测量使用的是 compsec-epfl/warp 的 commit 655e7d5。作者在运行时发现了验证器的两个问题，私下报告给了 WARP 作者，对方很快回复并请他们提交修复。</p>
+<ol>
+<li>Fiat-Shamir transcript 没有绑定关系索引（R1CS 矩阵）和协议参数，所以验证器的挑战值与被证明的关系无关。相关背景见论文 <a href="https://eprint.iacr.org/2023/691" rel="noopener noreferrer">Weak Fiat-Shamir Attacks on Modern Proof Systems</a>。</li>
+<li>验证器没有检查新承诺的认证路径数量。省略路径时，只要保持批处理声明不变，错误的移位查询答案也能通过验证。作者没有测试这能否进一步用来累积一个虚假实例。</li>
+</ol>
+<p>两个问题都已在 <a href="https://github.com/compsec-epfl/warp/pull/27" rel="noopener noreferrer">compsec-epfl/warp 的 PR 27</a>（“Bind the index into the Fiat-Shamir transcript and check the fresh auth path count”）中修复。修复不影响上文的测量：验证（1.45 对 1.44 毫秒）、判定（146.2 对 146.4 毫秒）和证明大小（189,264 字节）都不变，证明时间的差异在运行间噪声范围内。作者感谢 @WizardOfMenlo 和 WARP 作者的快速响应。</p>
+<p>原文末尾附有完整参考文献列表（WARP、Arc、WHIR、Ligerito、EIP-8292、leanVM、leanBench 等），见下方原文。</p>
+</div></section>
+<section class="reader-panel" id="original" data-reader-panel="original" aria-label="原文">
+<h2 class="section-heading">原文</h2><p class="completeness-note">原文取自 ethresear.ch 帖子的 Markdown 源（/raw/26227），为 2026-11-09 15:48 UTC 编辑后的版本，含当天追加的“Update, 9 Nov 2026”一节；首行的作者与时间戳行未保存。数学公式保持原帖的 LaTeX 源文本，本站不渲染公式。原帖无图片或视频。</p><h3 class="original-title">Folding vs full-verifier recursion for PQ signature aggregation in leanVM: measurements and negative results</h3>
+
+<div class="prose" lang="en"><h2>TL;DR</h2>
+<p>On an 8 GB M2 running leanVM at commit df7d122, hash-based accumulation did not beat leanVM's full-verifier recursion inside an aggregator. Our best batching design also missed its 15% gate once the leaf size was tuned.</p>
+<ul>
+<li><strong>Negative results (D1, D2, D3-S).</strong>
+<ul>
+<li>Folding leanXMSS verifications directly needs at least 7.1M R1CS constraints per signature. That is about 450x leanVM's per-signature cost (Inferred from measured WARP rates).</li>
+<li>Folding the whole leanVM step relation runs at 260 ns per witness element, against leanVM's 55 ns per committed word (Verified rates).</li>
+<li>Accumulating children's openings across merges spends about 57k cycles per step to save at most 46k (Verified counts).</li>
+</ul>
+</li>
+<li><strong>Cost anatomy (Verified).</strong>
+<ul>
+<li>Verifying one child inside a merge costs 186.8k VM cycles. Its WHIR opening is 55% of that.</li>
+<li>Merkle hashing is 12% of the cycles but 79% of the Keccak calls.</li>
+<li>73% of the JUMP rows are subfield checks.</li>
+</ul>
+</li>
+<li><strong>Batched child openings (B'-L1).</strong>
+<ul>
+<li>One shared WHIR opening from level 1 saves 32.8k cycles per child (17.6%, Verified by cost emulation). A round-by-round sketch keeps leanVM's bounds (Inferred).</li>
+<li>For 1,500 signatures it is still 2.4% slower at the slot deadline than the baseline at the baseline's best configuration.</li>
+</ul>
+</li>
+<li><strong>Configuration rule (Verified on this machine).</strong>
+<ul>
+<li>A merge node that steps from mu 25 to mu 26 takes 1.4 to 1.8x longer for about 3% more committed words.</li>
+<li>Aggregating 1,500 signatures as 5 leaves of 300 instead of 6 of 250 keeps the node at mu 25. The deadline drops from 3.11 s to 2.24 s and CPU per slot from 7.99 s to 6.47 s. A cost model that is linear in fan-in and leaf size cannot see this step.</li>
+</ul>
+</li>
+<li><strong>Scope.</strong> Everything here is inside one aggregator, and gossiped objects stay leanVM proofs. An accumulator would have to carry its leaf's witness (about 1 GiB at 1,500 signatures) instead of a 265 KiB proof.</li>
+</ul>
+<h2>1. Question and setting</h2>
+<p>We asked where, if anywhere, hash-based accumulation (WARP, Arc) beats leanVM's full-verifier recursion for post-quantum signature aggregation. We counted CPU time, latency at the slot deadline, memory and bytes moved.</p>
+<p>Lean Ethereum replaces BLS with leanXMSS signatures aggregated by leanVM proofs. EIP-8292 (draft) defines leaf aggregation, recursive merges and a gossip target of about 256 KiB per aggregate.</p>
+<p>The EF design study by Coratger and Setty contrasts two paths. Path A runs a full verifier inside a zkVM. Path B folds and then proves a decider. The study gives no numbers. We found no public Arc implementation. WARP has research code (compsec-epfl/warp), which we ran locally.</p>
+<p><strong>Scope: inside one aggregator.</strong> An accumulator must carry its witness: about 1 GiB of committed words for a 1,500-signature leaf, against a 265 KiB leanVM proof. Gossip hops therefore stay recursive. Accumulation can only replace recursion between proofs that one machine already holds.</p>
+<p><strong>Setup (Verified).</strong></p>
+<ul>
+<li><strong>leanVM:</strong> leanEthereum/leanMultisig (since renamed leanVM) at commit df7d122, built with rustc 1.99.0.
+<ul>
+<li>Binary tower field: GF(2^64), with challenges in GF(2^192).</li>
+<li>Keccak-256 as the hash.</li>
+<li>WHIR in its Ligerito form, over one stacked commitment per proof.</li>
+</ul>
+</li>
+<li><strong>Machine:</strong> Apple M2 MacBook Air, 8 cores (4 performance, 4 efficiency), 8 GB, fanless, macOS 26.5.2. We treat it as a low-end aggregator.
+<ul>
+<li>Background swap was 1.4 to 1.8 GiB during timing.</li>
+<li>Run-to-run noise reaches 10 to 15% on some configurations.</li>
+</ul>
+</li>
+<li><strong>Workload:</strong> leaves of 250 to 350 leanXMSS signatures at rate 1/4, merged n-to-1 at outer rate 1/4. Merge proofs were 218 to 248 KiB.</li>
+<li><strong>Metrics:</strong> deadline = last leaf + merge. CPU per slot = n x leaf + merge.</li>
+<li><strong>What transfers:</strong> cycle counts, table sizes and committed words are exact and do not depend on the platform. Times are meaningful only as ratios on this machine.</li>
+</ul>
+<h2>2. Baseline, and what verifying one child costs</h2>
+<p>Verifying one 250-signature child inside a merge costs 186.8k VM cycles, and that child's WHIR opening is 55% of it (Verified).</p>
+<p><strong>Baseline (Verified).</strong></p>
+<ul>
+<li><strong>Leaf aggregation:</strong> N leanXMSS signatures cost about 18.5k + 805.7 N cycles, with 186.5 Keccak calls per signature.
+<ul>
+<li>N = 1,500 reproduces the README exactly: 1,227,023 cycles, 2^26.993 committed words, 265.1 KiB proof.</li>
+</ul>
+</li>
+<li><strong>Merge:</strong> n children over 250-signature leaves cost about 19.4k + 186.8k n cycles.
+<ul>
+<li>The README's 2-to-1 recursion figure (542,049 cycles) did not reproduce. We measured 438,675 over 900-signature leaves.</li>
+</ul>
+</li>
+<li><strong>Timing on the M2:</strong> a 250-signature leaf proves in about 1.0 s. Merges at mu 25 prove at 35 to 44 ns per committed word.</li>
+<li><strong>No batching today:</strong> the merge guest runs a full five-level WHIR opening for every child's stacked commitment.</li>
+</ul>
+<p><strong>Per-child cost inside the merge guest</strong> (Verified; exact profiler attribution, 250-signature leaves, rate 1/4):</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>Component</th>
+<th>Cycles per child</th>
+<th>Share</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>WHIR opening, level 0</td>
+<td>56,931.5</td>
+<td>30.5%</td>
+</tr>
+<tr>
+<td>WHIR opening, level 1</td>
+<td>18,815.5</td>
+<td>10.1%</td>
+</tr>
+<tr>
+<td>WHIR opening, levels 2 to 4, tail and setup</td>
+<td>27,375.5</td>
+<td>14.7%</td>
+</tr>
+<tr>
+<td>Keccak GKR</td>
+<td>35.8k</td>
+<td>19.2%</td>
+</tr>
+<tr>
+<td>Table sumcheck</td>
+<td>12.1k</td>
+<td>6.5%</td>
+</tr>
+<tr>
+<td>Terminal weights</td>
+<td>11.3k</td>
+<td>6.0%</td>
+</tr>
+<tr>
+<td>Bus GKR</td>
+<td>9.6k</td>
+<td>5.1%</td>
+</tr>
+<tr>
+<td>Ring switch and claim batching</td>
+<td>6.1k</td>
+<td>3.3%</td>
+</tr>
+<tr>
+<td>Other (remainder, derived)</td>
+<td>about 8.8k</td>
+<td>4.7%</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>186,807.5</strong></td>
+<td><strong>100%</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The WHIR ladder at rate 1/4 folds by 6, 4, 4, 4, 4 with 112, 45, 28, 21 and 16 queries and 17 grinding bits per level.</p>
+<p><strong>Two observations (Verified).</strong></p>
+<ul>
+<li><strong>Merkle hashing</strong> is 12.4% of the per-child cycles but 78.7% of its 5,188 Keccak calls. A hash change would move Keccak counts far more than cycles.</li>
+<li><strong>JUMP rows:</strong> there are 12,665 per child.
+<ul>
+<li>9,300 (73%) come from <code>assert_in_k</code> subfield (packing) checks.</li>
+<li>1,488 come from runtime <code>match</code> dispatch.</li>
+<li>Loops account for only 567, so loop unrolling cannot shrink this table much.</li>
+</ul>
+</li>
+</ul>
+<h2>3. Negative results for hash-based accumulation</h2>
+<p>None of the three accumulation designs we costed beats recursion inside an aggregator. Each misses by a margin that tuning does not close.</p>
+<p><strong>D1: fold signature verifications directly (WARP-style PESAT / R1CS).</strong></p>
+<ul>
+<li>One leanXMSS verification runs 186 Keccak-f permutations. A bit-level encoding needs at least 7.1M R1CS constraints (Inferred).</li>
+<li>WARP's research code has a measured marginal prover rate of about 0.26 us per constraint over Goldilocks on this machine. That gives about 1.9 s per signature.</li>
+<li>leanVM spends about 4.1 ms per signature, so D1 is about 450x slower (Inferred from Verified rates). Even an ideal 64-way packing of bits leaves about 29 ms, still 7x.</li>
+</ul>
+<p><strong>D2: fold the whole leanVM step relation.</strong></p>
+<ul>
+<li>WARP's prover cost about 260 ns per witness element. leanVM proves a whole leaf at about 55 ns per committed word. Both are Verified on the M2.</li>
+<li>That 4.7x gap holds before the bus and Keccak GKR arguments are even expressed as PESAT, and before the final decider (Inferred).</li>
+</ul>
+<p><strong>D3-S: accumulate children's WHIR proximity claims across merges.</strong></p>
+<ul>
+<li>A child's level-0 opening costs about 57k cycles in-circuit. Levels 1 and above cost about 46k (Verified).</li>
+<li>An accumulation step must re-open its own accumulator at level 0. It pays about 57k to defer at most 46k, so it loses on every child (Inferred from Verified counts).</li>
+</ul>
+<p><strong>WARP reference point (Verified).</strong> WARP's research code at commit 655e7d5 accumulated 8 instances with M = 2^16 over the BLS12-381 scalar field:</p>
+<ul>
+<li>prove 1.16 s;</li>
+<li>verify 1.48 ms;</li>
+<li>decide 141 ms;</li>
+<li>proof 189 KB.</li>
+</ul>
+<p>WARP needs a large field. leanVM's witness lives in GF(2^64) with challenges in GF(2^192). The WARP authors list linear-time folding over small fields as open.</p>
+<p><strong>A note on WARP's research code.</strong> While running WARP's research code, we noticed an implementation matter that we consider important. We have reported it privately to the WARP authors and will describe it here once they have responded. We do not expect it to change the WARP rates above (Inferred).</p>
+<h2>4. Batching the children's openings (B'-L1)</h2>
+<p>One WHIR opening shared by all children from level 1 on saves 32.8k cycles per child (17.6%). Yet at 1,500 signatures it is 2.4% slower at the deadline than the baseline at the baseline's best configuration.</p>
+<p><strong>Design.</strong></p>
+<ul>
+<li>Each leaf runs its own WHIR level-0 round, then stops and keeps its level-1 codeword.</li>
+<li>The merge verifies each child's level-0 round as today.</li>
+<li>It then runs one opening over a virtual word that stacks the children's level-1 words as extra interleaving rows, with k = ceil(log2 n) extra fold variables.</li>
+<li>From level 1 on, query counts and 17-bit grinding are unchanged. We checked this against leanVM's own parameter search.</li>
+</ul>
+<p><strong>Soundness sketch (Inferred, not a proof).</strong> Treat the merge as one IOP: n child prefixes, then one batched suffix compiled with BCS. The batch transcript is seeded by every child's statement, roots and claims. Every round-by-round transition then keeps leanVM's per-transition bound or a stronger one, provided that:</p>
+<ol>
+<li>the stacked level-1 word is analysed as one interleaved codeword, whose Johnson list size $L_1$ does not depend on the alphabet;</li>
+<li>folding $2^{4+k}$ rows uses the mutual-correlated-agreement result leanVM already relies on (Jo 2026/891, Thm 4.4), whose error does not depend on the row count;</li>
+<li>the batching challenge $\beta$ is drawn only after all children's roots and claims are absorbed.</li>
+</ol>
+<p>The only new transition is $\beta$.</p>
+<ul>
+<li>A tuple that agrees with the stacked word on a common large set has each child component in that child's own list.</li>
+<li>So for every tuple in the joint list (at most $L_1$ of them), the combined claim error is a nonzero multilinear polynomial in $\beta$.</li>
+<li>A union bound over the joint list then gives:</li>
+</ul>
+<p>$$ \Pr[\text{escape at } \beta] \le \frac{k , L_1}{|\mathbb{E}|} \approx 2^{1.6 + 9.4 - 192} = 2^{-181} \quad (k = 3) $$</p>
+<p>The pitfall is a union over the individual lists instead. That gives $L_1^n$ tuples and only about $2^{-114}$ at n = 8, below the 128-bit target.</p>
+<p><strong>Measured cost.</strong> We emulated the cost exactly, not the soundness. An UNSOUND guest variant (V6) does each child's level-1 Merkle openings at shared positions. It adds the batch transcript, the k extra fold rounds and the per-child combination work, using dummy values where the batch would supply real ones.</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>Quantity</th>
+<th>Value</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cycles saved per child</td>
+<td>32,835 (17.6% of 186,873)</td>
+<td>Verified (slope over n = 2 to 8)</td>
+</tr>
+<tr>
+<td>New per-child work</td>
+<td>511.5 cycles</td>
+<td>Verified (profiled)</td>
+</tr>
+<tr>
+<td>Keccak calls saved per child</td>
+<td>at least 1,134 (about 22%)</td>
+<td>Verified (earlier variant)</td>
+</tr>
+<tr>
+<td>Leaf time saved (levels 1 to 4 not run)</td>
+<td>0.103 s</td>
+<td>Inferred from measured trace spans</td>
+</tr>
+<tr>
+<td>Batched native opener at the deadline</td>
+<td>0.11 s</td>
+<td>Inferred</td>
+</tr>
+<tr>
+<td>Level-1 data held per child until the deadline</td>
+<td>about 0.45 GiB</td>
+<td>Inferred</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Gate result.</strong> Before timing, we fixed the rule. Each side is compared at its lower-deadline configuration for 1,500 signatures, and B'-L1 must cut the deadline or CPU per slot by at least 15%.</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>Configuration</th>
+<th>Side</th>
+<th>Merge mu</th>
+<th>Leaf (s)</th>
+<th>Merge (s)</th>
+<th>Deadline (s)</th>
+<th>CPU per slot (s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6 x 250</td>
+<td>baseline</td>
+<td>26</td>
+<td>0.976</td>
+<td>2.132</td>
+<td>3.108</td>
+<td>7.988</td>
+</tr>
+<tr>
+<td>6 x 250</td>
+<td>B'-L1</td>
+<td>25</td>
+<td>0.873</td>
+<td>1.305</td>
+<td>2.288</td>
+<td>6.653</td>
+</tr>
+<tr>
+<td>5 x 300</td>
+<td>baseline</td>
+<td>25</td>
+<td>1.059</td>
+<td>1.176</td>
+<td><strong>2.235</strong></td>
+<td>6.471</td>
+</tr>
+<tr>
+<td>5 x 300</td>
+<td>B'-L1</td>
+<td>25</td>
+<td>0.956</td>
+<td>1.235</td>
+<td>2.301</td>
+<td>6.125</td>
+</tr>
+</tbody>
+</table>
+<p>How to read the table:</p>
+<ul>
+<li>Leaf and merge times are pooled medians of 6 runs (Verified). B'-L1 rows subtract 0.103 s per leaf and add the 0.11 s opener.</li>
+<li><strong>Best against best</strong> (baseline 5 x 300, B'-L1 6 x 250): B'-L1 is 2.4% slower at the deadline and uses 2.8% more CPU.</li>
+<li><strong>Most favourable assumptions</strong> (a free opener, the maximum leaf saving, lane-model merge times from section 5): the gain is at most 11.4% on the deadline and 10.5% on CPU (Inferred).</li>
+</ul>
+<p>At a fixed 6 x 250, B'-L1 does cut the deadline by 26%. Nearly all of that comes from keeping the node at mu 25, and the baseline gets there more cheaply by choosing a larger leaf.</p>
+<h2>5. Committed size, lanes and the mu step</h2>
+<p>Two things set a merge's prove time on this machine: its committed lane count within one mu, and a large jump when the node crosses from mu 25 to mu 26 (Verified).</p>
+<p><strong>How leanVM sizes its commitment</strong> (Verified from source at df7d122). Each table is padded to a power of two, and the stacked witness has</p>
+<p>$$ \mathrm{TC} = 4 \cdot 2^{h} + 2^{k_{bc}} + 2^{6+\tau_K} + \sum_t w_t , 2^{\tau_t}, \quad \tau_t = \lceil \log_2 \mathrm{rows}_t \rceil, \quad \mu = \max(\lceil \log_2 \mathrm{TC} \rceil, 15) $$</p>
+<ul>
+<li><strong>Widths:</strong> w is 15 for XOR, MUL and DEREF, 8 for SET, 14 for JUMP and 26 for KECCAK.</li>
+<li><strong>Other terms:</strong> h is the memory height and $k_{bc}$ the bytecode-counter height.</li>
+<li><strong>Lanes:</strong> the prover commits only ceil(TC / 2^(mu-6)) lanes of 2^(mu-6) words, and never encodes the zero tail.</li>
+<li><strong>Check:</strong> TC recomputed from exact row counts matched the printed value in all 8 runs we checked.</li>
+</ul>
+<p><strong>Node capacity at mu 25 (Verified).</strong> Crossing a power of two adds w x 2^tau words at once, so capacity comes in steps.</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>Leaf size (signatures)</th>
+<th>Baseline children at mu 25</th>
+<th>B'-L1 children at mu 25</th>
+<th>First fan-in at mu 26</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>250</td>
+<td>5</td>
+<td>6</td>
+<td>baseline 6: JUMP passes 2^16 rows (+14 x 2^16 words). B'-L1 7: memory passes 2^21.</td>
+</tr>
+<tr>
+<td>350</td>
+<td>5 (exactly 2^25 words)</td>
+<td>6</td>
+<td>baseline 6; B'-L1 7</td>
+</tr>
+</tbody>
+</table>
+<p>The largest leaf that stays at mu 25 is 350 signatures. A 375-signature leaf is mu 26; we tested in steps of 25.</p>
+<p><strong>The mu-26 premium (Verified on this machine).</strong> Two near-controlled pairs show the jump:</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>Pair</th>
+<th>mu 25 run</th>
+<th>mu 26 run</th>
+<th>Committed words</th>
+<th>Time ratio</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Baseline, 6 runs each</td>
+<td>5 x 300: 1.176 s</td>
+<td>6 x 250: 2.132 s</td>
+<td>33.55M vs 34.60M</td>
+<td>1.81</td>
+</tr>
+<tr>
+<td>Baseline, single runs</td>
+<td>5 x 350: 1.163 s</td>
+<td>6 x 350: 1.637 s</td>
+<td>33.55M vs 34.60M</td>
+<td>1.41</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Stage attribution</strong> of the first pair (2 traced proves each; spans Verified, causes Inferred):</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>Stage</th>
+<th>mu 25 (ms)</th>
+<th>mu 26 (ms)</th>
+<th>Ratio</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>WHIR iterations, levels 0 to 3</td>
+<td>240.1</td>
+<td>529.7</td>
+<td>2.21</td>
+</tr>
+<tr>
+<td>Commit (encode and Merkle)</td>
+<td>365.5</td>
+<td>625.5</td>
+<td>1.71</td>
+</tr>
+<tr>
+<td>Bus, other than GKR</td>
+<td>63.2</td>
+<td>203.5</td>
+<td>3.22</td>
+</tr>
+<tr>
+<td>Execute</td>
+<td>41.1</td>
+<td>130.9</td>
+<td>3.18</td>
+</tr>
+<tr>
+<td>Bus GKR</td>
+<td>94.8</td>
+<td>132.5</td>
+<td>1.40</td>
+</tr>
+<tr>
+<td>Keccak reduction</td>
+<td>168.5</td>
+<td>192.5</td>
+<td>1.14</td>
+</tr>
+<tr>
+<td>Table sumcheck, ring switch, witness build, tail</td>
+<td>139.4</td>
+<td>147.2</td>
+<td>1.06</td>
+</tr>
+<tr>
+<td>Sum of stages</td>
+<td>1,112.6</td>
+<td>1,961.8</td>
+<td>1.76</td>
+</tr>
+</tbody>
+</table>
+<p>The Prove-span totals are 1,130 and 1,975 ms.</p>
+<p><strong>Reading the attribution (Inferred).</strong></p>
+<ul>
+<li><strong>The structural part is about 290 ms.</strong> Everything after WHIR's first fold works on objects of 2^(mu-6) entries, so the WHIR rows doubling is expected.</li>
+<li><strong>The rest looks like memory cost.</strong>
+<ul>
+<li>The commit should grow about 8% (lanes x per-lane encode length: 33 x 2^22 x 22 against 64 x 2^21 x 21). It grew 71%.</li>
+<li>Bus and execute grew more than 3x while cycles grew 19%.</li>
+<li>We read the roughly 500 ms excess as memory-system cost: a 3.1 GB footprint on an 8 GB machine, with full codewords held in memory (leanVM's store mode on Apple silicon).</li>
+</ul>
+</li>
+<li><strong>Larger machines may show less.</strong> Their premium may sit closer to the structural 0.3 s. We could not test one.</li>
+</ul>
+<p><strong>Configuration rule.</strong> On this hardware, choose leaf size and fan-in so that the merge node stays at mu 25.</p>
+<ul>
+<li>With mu-25 leaves of up to 350 signatures, a baseline mu-25 node holds up to 5 children, so 1,750 signatures.</li>
+<li>For 1,500 signatures, use 5 x 300 instead of 6 x 250. The deadline drops from 3.11 s to 2.24 s (-28%) and CPU per slot from 7.99 s to 6.47 s (-19%), with no protocol change (Verified inputs).</li>
+</ul>
+<p><strong>Implication for topology tools (Inferred).</strong> A cost model that is linear in fan-in and leaf size smooths over the mu step. leanBench's topology explorer uses per-machine linear fits of this kind.</p>
+<ul>
+<li>Such a model over-predicts merges just below a mu boundary and under-predicts merges just above it, by up to about 0.5 to 1 s on this machine.</li>
+<li>A step-aware model can use the TC formula above: count rows per table, pad each table, sum, then charge per committed lane plus a per-mu term.</li>
+</ul>
+<h2>6. Where batching could still matter</h2>
+<p>B'-L1 fits one more child inside a mu-25 node. That only helps an aggregator that must merge more signatures than a baseline mu-25 node holds (Inferred).</p>
+<ul>
+<li><strong>The window is 1,751 to 2,100 signatures.</strong> With leaves of at most 350 signatures, a baseline mu-25 node holds 1,750 signatures and a B'-L1 node 2,100. In that range B'-L1 avoids the mu-26 premium, worth about 0.5 to 1.0 s on this machine.</li>
+<li><strong>Memory works against it.</strong> B'-L1 holds about 0.45 GiB of level-1 data per child until the deadline. Six children plus a 350-signature leaf (3.3 GB footprint) exceed 70% of an 8 GB machine.</li>
+<li><strong>The cost to adopt it is real.</strong> It needs partial leaf proofs, a new batched opener, guest changes and a full soundness proof.</li>
+<li><strong>Our workloads sit below the window.</strong> We assumed 512 and 1,500 signatures per aggregator. If committees push a single aggregator past 1,750, this regime becomes relevant, and the design and soundness sketch above are a starting point.</li>
+</ul>
+<h2>7. Limitations</h2>
+<ul>
+<li><strong>One machine.</strong> An 8 GB fanless M2 with 1.4 to 1.8 GiB of background swap, and 10 to 15% noise on some configurations. The B'-L1 verdict survives this noise. The size of the mu-26 premium may not carry over to other hardware.</li>
+<li><strong>One commit.</strong> leanVM df7d122 (6 Nov 2026). Its planned hash change, RISC-V ISA and zero knowledge will each move these numbers.</li>
+<li><strong>B'-L1 was emulated for cost, not built.</strong> The V6 guest is unsound by construction: dummy values and unconstrained shared positions. Its leaf saving comes from native trace spans, and its opener cost is an estimate.</li>
+<li><strong>The soundness argument is a sketch</strong> of round-by-round bounds, not a proof. It assumes leanVM's own regime is sound as claimed: Johnson bound, 128 bits per transition, 17-bit grinding.</li>
+<li><strong>D1 and D2 rest on WARP's prime-field research code</strong> for their rates. A binary-field or small-field folding scheme could change those constants, but not the D3-S argument.</li>
+<li><strong>Out of scope:</strong> recursion across gossip hops, and zero knowledge.</li>
+</ul>
+<h2>8. Questions for readers</h2>
+<ol>
+<li><strong>leanVM developers:</strong> is the mu-26 jump in commit, bus and execute time expected? Does rebuild mode (REBUILD_OVER_STORE) change it on machines with more RAM? cc @tcoratger</li>
+<li><strong>Subfield checks:</strong> can the <code>assert_in_k</code> checks (9,300 JUMP rows per child) be batched soundly? A random K-linear combination gives only about 64 bits per repetition.
+cc Tom Wambsgans</li>
+<li><strong>EF / leanSpec:</strong> what aggregation interval and how many signatures per aggregator should we target? We assumed 1, 2 or 4 s intervals and 512 or 1,500 signatures.</li>
+<li><strong>Path B:</strong> is folding still under consideration after the binary-field rewrite, and for which hop of the tree? cc @tcoratger</li>
+<li><strong>leanBench maintainers:</strong> would a step-aware cost model (section 5) be useful in the topology explorer? @unnawut</li>
+<li><strong>Larger machines:</strong> anyone with a larger Linux machine could rerun the configuration comparison with the scripts below.</li>
+</ol>
+<h2>9. Related work</h2>
+<p>We found no prior work that batches WHIR or FRI openings across the children of one recursion node. We also found none that models aggregation-tree cost with table padding.</p>
+<p>This rests on a targeted search of the sources below, as of 8 Nov 2026; it is not an exhaustive survey.</p>
+<ul>
+<li><strong>Hash-based accumulation.</strong>
+<ul>
+<li><a href="https://eprint.iacr.org/2024/474" rel="noopener noreferrer">Accumulation Without Homomorphism</a>: bounded depth, any linear code.</li>
+<li><a href="https://eprint.iacr.org/2024/1731" rel="noopener noreferrer">Arc</a>: unbounded depth; accumulates Reed-Solomon proximity claims as a near drop-in for IOP-based PCD.</li>
+<li><a href="https://eprint.iacr.org/2025/753" rel="noopener noreferrer">WARP</a>: linear-time prover, straightline extraction.</li>
+<li>D3-S is our cost check of the Arc-style use inside leanVM.</li>
+<li>FACS is named in the WARP authors' talk; we could not locate a paper.</li>
+</ul>
+</li>
+<li><strong>Folding over small and binary fields.</strong> The WARP authors list linear-time folding over small fields as an open problem. Neo, SuperNeo and PikkuFold are lattice-based. Accordion batches folding with a KZG decider, so it is not post-quantum.</li>
+<li><strong>Binary-field recursion with deferred claims.</strong> A <a href="https://github.com/Plonky3/Plonky3/pull/2533" rel="noopener noreferrer">closed Plonky3 pull request</a> (October 2026, since moved to a separate repository) recurses Flock proofs over binary fields.
+<ul>
+<li>Each node defers the inner circuit's matrix evaluation as a public claim. Claims on the same matrix fold across children, and the root evaluates each once.</li>
+<li>It defers a different object than B'-L1: a matrix-evaluation claim, not a PCS proximity opening.</li>
+<li>Its 2-to-1 XMSS node took 36.9 s on a Ryzen 9 9950X3D with 8 threads, so it is not a latency comparator for leanVM today.</li>
+</ul>
+</li>
+<li><strong>Batched openings inside one proof.</strong> Opening several committed oracles at shared query positions is standard practice.
+<ul>
+<li>Examples: batch FRI in <a href="https://docs.rs/crate/plonky2/latest/source/plonky2.pdf" rel="noopener noreferrer">Plonky2</a>; per-height FRI groups with shared query indices in <a href="https://github.com/yetanotherco/lambda_vm/pull/994" rel="noopener noreferrer">recent STARK provers</a>; one WHIR opening over many commitments in <a href="https://eprint.iacr.org/2026/2330" rel="noopener noreferrer">Ziren</a>.</li>
+<li>B'-L1 applies the same idea across a recursion node's children, from level 1 on.</li>
+</ul>
+</li>
+<li><strong>Aggregation topology.</strong>
+<ul>
+<li><a href="https://github.com/leanEthereum/leanBench" rel="noopener noreferrer">leanBench</a> measures leanVM trees with fan-in 2, 4 and 8 over 125-, 250- and 500-signature leaves, at rate 1/4.</li>
+<li>Its <a href="https://bench.leanroadmap.org/topology.html" rel="noopener noreferrer">topology explorer</a> predicts feasibility from per-machine linear fits. Section 5 suggests such fits miss the mu step.</li>
+<li>A <a href="https://hackmd.io/@goatresearch/H1G2tOCwGx" rel="noopener noreferrer">survey of Ethereum's post-quantum consensus</a> (August 2026) lists optimal aggregation-tree construction as an open problem.</li>
+</ul>
+</li>
+<li><strong>Soundness of recursion over hash-based SNARKs.</strong> PCD from straightline extractors; PCD from arithmetized random oracles; the impossibility of relativized succinct arguments in the ROM.</li>
+<li><strong>Framing.</strong> The EF design study by Coratger and Setty (Path A vs Path B) posed the question this post measures.</li>
+</ul>
+<h2>10. Reproducibility</h2>
+<p>Every number above records the leanVM commit (df7d122abbe25cf12e5c8ae992ce6d3505f75372), the command line, the repeat count, and whether it is a median.</p>
+<ul>
+<li><strong>Measurement branches:</strong> local edits of the merge guest (crates/rec_aggregation/guests/lean_ethereum.py), plus an environment-gated table print. The UNSOUND variants exist only to count cost.</li>
+<li><strong>Merge timing:</strong> <code>leanvm recursion --n &lt;n&gt; --xmss-per-leaf &lt;N&gt; --leaf-log-inv-rate 2 --log-inv-rate 2 --repeat 3 --tracing</code>, with 30 s sleeps and two interleaved passes.</li>
+<li><strong>Leaf timing:</strong> <code>leanvm aggregate --xmss &lt;N&gt; --log-inv-rate 2 --repeat 3</code>.</li>
+<li><strong>Scripts, diffs and logs:</strong> https://github.com/aryaethn/leanvm-accum-study. The bundle holds diffs for all 10 measurement branches against df7d122, our scripts, parsed tables and the raw logs for the timing runs. Its parsers regenerate the timing and stage tables byte for byte from the bundled logs.</li>
+</ul>
+<h2><strong>Update, 9 Nov 2026: fixes to the WARP reference code</strong></h2>
+<p>The WARP measurements above use compsec-epfl/warp at commit 655e7d5. While running them, we found two verifier issues and reported them privately to the authors, who responded quickly and asked for a fix.</p>
+<ol>
+<li>The Fiat-Shamir transcript did not bind the relation index (the R1CS matrices) or the protocol parameters, so verifier challenges did not depend on the relation being proven. See Weak Fiat-Shamir Attacks on Modern Proof Systems: https://eprint.iacr.org/2023/691</li>
+<li>The verifier did not check the number of authentication paths for the fresh commitment. With paths omitted, false shift-query answers could pass verification, as long as they kept the batching claim unchanged. We did not test whether this extends to accumulating a false instance.</li>
+</ol>
+<p>Both are fixed in Bind the index into the Fiat-Shamir transcript and check the fresh auth path count: https://github.com/compsec-epfl/warp/pull/27</p>
+<p>The fix does not change our measurements. Verify (1.45 vs 1.44 ms), decide (146.2 vs 146.4 ms) and proof size (189,264 B) are unchanged, and the prove difference is within run-to-run noise. Thanks to @WizardOfMenlo and the WARP authors for the fast response.</p>
+<h2>References</h2>
+<ul>
+<li>WARP, Linear-Time Accumulation Schemes: https://eprint.iacr.org/2025/753</li>
+<li>Arc, Accumulation for Reed-Solomon Codes: https://eprint.iacr.org/2024/1731</li>
+<li>Accumulation Without Homomorphism: https://eprint.iacr.org/2024/474</li>
+<li>PQ Signature Aggregation, a Folding Approach (EF design study): https://ethresear.ch/t/post-quantum-signature-aggregation-a-folding-approach/23639</li>
+<li>EIP-8292 PQ Attestation Aggregators: https://eips.ethereum.org/EIPS/eip-8292</li>
+<li>leanVM repository: https://github.com/leanEthereum/leanVM</li>
+<li>leanBench: https://github.com/leanEthereum/leanBench</li>
+<li>leanBench topology explorer: https://bench.leanroadmap.org/topology.html</li>
+<li>WARP research code: https://github.com/compsec-epfl/warp</li>
+<li>Plonky3 native recursion for FRI, WHIR and Flock (PR 2533): https://github.com/Plonky3/Plonky3/pull/2533</li>
+<li>Flock: https://eprint.iacr.org/2026/1329</li>
+<li>Plonky2 whitepaper: https://docs.rs/crate/plonky2/latest/source/plonky2.pdf</li>
+<li>lambda_vm batched FRI per height (PR 994): https://github.com/yetanotherco/lambda_vm/pull/994</li>
+<li>Ziren: https://eprint.iacr.org/2026/2330</li>
+<li>From Aggregate Signatures to Aggregate Proofs (survey): https://hackmd.io/@goatresearch/H1G2tOCwGx</li>
+<li>WHIR: https://eprint.iacr.org/2024/1586</li>
+<li>Ligerito: https://eprint.iacr.org/2025/1187</li>
+<li>Interleaving Stability for Mutual Correlated Agreement and Curve Decodability: https://eprint.iacr.org/2026/891</li>
+<li>On Proximity Gaps for Reed-Solomon Codes: https://eccc.weizmann.ac.il/report/2025/169/</li>
+<li>Security Bounds for PCD from Straightline Extractors: https://eprint.iacr.org/2023/1646</li>
+<li>Proof-Carrying Data from Arithmetized Random Oracles: https://eprint.iacr.org/2023/587</li>
+<li>Relativized Succinct Arguments in the ROM Do Not Exist: https://eprint.iacr.org/2024/728</li>
+<li>Neo and SuperNeo: https://eprint.iacr.org/2026/242</li>
+<li>PikkuFold: https://eprint.iacr.org/2026/1809</li>
+<li>Accordion: https://eprint.iacr.org/2026/2160</li>
+</ul></div>
+</section>
+<footer class="source-box"><span>内容来自原作者；中文为新知编辑改写，非逐字翻译。</span><div><a href="https://ethresear.ch/t/folding-vs-full-verifier-recursion-for-pq-signature-aggregation-in-leanvm-measurements-and-negative-results/26227" target="_blank" rel="noopener noreferrer">打开原文 ↗</a><a href="https://github.com/aryaethn/leanvm-accum-study" target="_blank" rel="noopener noreferrer">相关链接 ↗</a></div></footer>
+</article></body></html>
