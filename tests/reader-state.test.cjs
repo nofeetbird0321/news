@@ -207,7 +207,8 @@ test('the same native video is in rewrite and original; both pause on hide/close
   await until(() => s.$('#rewrite video'), 'rewrite video');
   const rewrite = s.$('#rewrite video'), original = s.$('#original video');
   assert.equal(rewrite.src, original.src); assert.equal(rewrite.preload, 'none'); assert.equal(rewrite.autoplay, false);
-  assert.match(rewrite.poster, /\/media\//); assert.match(rewrite.dataset.originalPoster, /^https:/);
+  if (rewrite.dataset.originalPoster) { assert.match(rewrite.poster, /\/media\//); assert.match(rewrite.dataset.originalPoster, /^https:/); }
+  else assert.equal(rewrite.hasAttribute('poster'), false); // poster is optional; never invented
   const before = s.pauses.length; s.click(s.$('[data-view="original"]'));
   assert.ok(s.pauses.slice(before).includes(rewrite));
   const next = s.pauses.length; s.click(s.$('[data-close-sheet]'));
@@ -243,7 +244,8 @@ test('user-requested stalled media gets honest recovery and clears on playback/p
   video.dispatchEvent(new s.w.Event('waiting')); assert.equal(timers.size, 1);
   video.dispatchEvent(new s.w.Event('pause')); assert.equal(timers.size, 0);
   video.dispatchEvent(new s.w.Event('error')); assert.equal(video.hidden, true);
-  assert.equal(figure.querySelector('[data-video-fallback]').hidden, false);
+  const fallback = figure.querySelector('[data-video-fallback]'); // only rendered when the source has a poster
+  if (video.dataset.originalPoster) assert.equal(fallback.hidden, false); else assert.equal(fallback, null);
   assert.equal(notice.dataset.mediaState, 'failed'); assert.match(notice.textContent, /暂时无法播放/);
   assert.equal(figure.querySelector('figcaption a').href, articles.find(a => a.id === NATIVE_VIDEO_ID).source_url);
 });

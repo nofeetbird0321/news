@@ -200,8 +200,11 @@ class BuildRegression(unittest.TestCase):
                     self.assertTrue(doc.select("img", src=build.local_media_url(media["url"]), **{"data-original-src": media["url"]}))
                 if media["type"] in ("video", "x_video"):
                     video = doc.select("video", src=media["url"])[0]
-                    self.assertEqual(video.get("poster"), build.local_media_url(media["poster"]))
-                    self.assertEqual(video.get("data-original-poster"), media["poster"])
+                    if media.get("poster"):  # poster is optional in SCHEMA; never invent one
+                        self.assertEqual(video.get("poster"), build.local_media_url(media["poster"]))
+                        self.assertEqual(video.get("data-original-poster"), media["poster"])
+                    else:
+                        self.assertFalse(video.get("poster"))
 
     def media_fixture(self):
         return {"id": "test-only-multimodal", "source": {"url": "https://example.invalid/source"},

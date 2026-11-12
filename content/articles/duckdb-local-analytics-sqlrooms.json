@@ -1,0 +1,113 @@
+{
+  "id": "duckdb-local-analytics-sqlrooms",
+  "date": "2026-11-12",
+  "published_at": "2026-11-12T00:00:00+00:00",
+  "ingested_at": "2026-11-12T08:15:00+08:00",
+  "source": {
+    "type": "web",
+    "url": "https://duckdb.org/2026/11/12/local-analytics-without-a-database-server.html",
+    "author": "Ilya Boyandin, Geertjan Wielenga, Tim Cox",
+    "handle": "duckdb",
+    "title_en": "Local Analytics Doesn’t Need a Database Server",
+    "related_url": "https://sqlrooms.org"
+  },
+  "title": "不用数据库服务器做本地分析：SQLRooms 作者讲 DuckDB 在浏览器和桌面端的用法",
+  "dek": "DuckDB 官方博客访谈 Ilya Boyandin：从 Flowmap City 的 DuckDB-Wasm，到 Foursquare Spatial Desktop 的按需切片、Cosmograph 的百万级图谱和让 AI 写 SQL，数据都留在用户机器上。",
+  "tags": [
+    "数据",
+    "DuckDB",
+    "本地优先",
+    "地理空间"
+  ],
+  "original": {
+    "lang": "en",
+    "title": "Local Analytics Doesn’t Need a Database Server",
+    "text_md": "[Header image: shown in the media section above]\n\n*TL;DR: From interactive maps to graph exploration, DuckDB makes it possible to analyze data without a database server. Ilya Boyandin shares how this approach led to SQLRooms, a toolkit for building analytics applications that bring data, visualizations, and AI-assisted analysis together on the user’s machine.*\n\n> You should own your data. It can live on your computer, not everything has to live in the Cloud. It can be synced via the cloud, but you decide when to keep it local and when not.\n>\n> — Ilya Boyandin, creator of [SQLRooms](https://sqlrooms.org)\n\n[Ilya Boyandin](https://www.linkedin.com/in/ilyabo/) is a software engineer, the creator of [SQLRooms](https://sqlrooms.org), [FlowmapBlue](https://flowmap.blue), and [Flowmap City](https://flowmap.city/). He worked on geospatial data analytics at Unfolded, the company founded by the team behind the open-source data visualization projects [deck.gl](https://deck.gl) and [kepler.gl](https://kepler.gl), which was later acquired by Foursquare.\n\n## How DuckDB Entered the Picture\n\nIlya first used DuckDB in [Flowmap City](https://flowmap.city/), a side project for [visualizing mobility flows](https://ilya.boyandin.me/p/flowmap-city) that he still maintains.\nWorking with a small budget, Ilya wanted to keep Flowmap City easy to operate with minimal infrastructure. DuckDB’s [WebAssembly build](/docs/2.0/clients/wasm/overview.html) lets the app run analytical queries in the user’s browser without a database server. Uploaded datasets are stored as Parquet files in S3. When someone opens a project, the app loads the data into DuckDB-Wasm through [presigned URLs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ShareObjectPreSignedURL.html).\n\nAs users pan, zoom, or change filters in Flowmap City, DuckDB-Wasm runs SQL queries in the browser to update the map. A single interaction can trigger a number of queries preparing the data for the current viewport:\n\n[Video 1: shown in the media section above]\n\nIlya explains: **“We can now do much of the analysis and visualization in the browser. This keeps infrastructure requirements low and can be faster because queries don’t need a round trip to the server.”**\n\n## From a Side Project to SQLRooms\n\nMuch of Flowmap City’s data-loading and interface code was useful beyond mobility analysis. Ilya extracted those pieces into SQLRooms, which he continues to develop as an open-source project.\n\n[SQLRooms](https://sqlrooms.org/) is a modular toolkit for building DuckDB-powered analytics applications in React. It provides building blocks for loading data, writing SQL, displaying tables, creating visualizations, and integrating AI assistants. Developers can combine these pieces with their own components.\n\nThese components work together within a *Room*: a workspace containing datasets, analysis artifacts such as saved queries, charts, maps, and documents, and the application state that connects them. SQLRooms handles query execution through a shared DuckDB connection, so developers can focus on how users explore their data and build on their work.\n\nDuckDB can run directly in the browser through WebAssembly or natively on the user’s machine in a desktop application, allowing data analysis without a remote database server.\n\nIlya’s interest in local-first software shaped the framework. **“You should own your data. It can live on your computer, not everything has to live in the Cloud. It can be synced via the cloud, but you decide when to keep it local and when not.”**\n\n## Putting SQLRooms to Work at Foursquare\n\nAt Foursquare, Ilya’s team has been developing [Foursquare Spatial Desktop](https://ilya.boyandin.me/p/fsq-spatial-desktop), a desktop application for exploring geospatial data built with SQLRooms. It combines DuckDB’s analytical engine with [kepler.gl](https://kepler.gl/)’s visualization tools. The app builds on the team’s experience with kepler.gl and [Foursquare Studio](https://studio.foursquare.com), its cloud-hosted geospatial analytics platform.\n\nIlya explains: **“For this particular product, DuckDB embedded into the desktop app is just the perfect fit. It enables analysis workflows which users can execute locally.”** SQLite is embeddable too, he says, but it is not column-oriented and was not designed for analytics on larger datasets.\n\n[Image 1: shown in the media section above]\n\nModern laptops have substantial computing power and GPUs well suited to visualization, Ilya adds. **“I’m seeing renewed interest in applications that keep data and computation on the user’s own machine.”**\n\n### Dynamic Tiling in Spatial Desktop\n\nSpatial Desktop uses [deck.gl](https://deck.gl/) to render maps, but drawing millions of features at once can slow things down. The app addresses this with dynamic tiling powered by DuckDB’s [spatial extension](/docs/2.0/core_extensions/spatial/overview.html).\n\nMap tiles are often prepared in advance for fast loading. Spatial Desktop can also generate tiles from users’ own datasets on demand, using the local DuckDB database, so users can start exploring without preparing a tileset first. For each requested tile, it selects nearby features and takes a random sample to keep dense tiles manageable. It also simplifies lines and polygons according to the zoom level, retaining more detail as the user zooms in.\n\n[Video 2: shown in the media section above]\n\nThe following simplified query shows the main steps. It assumes the source geometries are already in Web Mercator coordinates (`EPSG:3857`). The tile width determines both a small buffer around the search area and a simplification tolerance equivalent to roughly half a pixel:\n\n```\nWITH tile AS (\n    SELECT\n        ST_TileEnvelope(z, x, y) AS bounds,\n        (ST_XMax(bounds) - ST_XMin(bounds)) / 256.0 AS meters_per_pixel\n),\ncandidates AS (\n    SELECT\n        f.id, f.geometry, tile.bounds,\n        GREATEST(meters_per_pixel * 0.5, 0.1) AS tolerance\n    FROM features f, tile\n    WHERE ST_Intersects_Extent(\n        f.geometry,\n        ST_Buffer(tile.bounds, meters_per_pixel * 16)\n    )\n),\nsampled AS (\n    SELECT *\n    FROM candidates\n    USING SAMPLE reservoir(50000 ROWS)\n),\nencoded AS (\n    SELECT\n        id,\n        ST_AsMVTGeom(\n            ST_SimplifyPreserveTopology(geometry, tolerance),\n            ST_Extent(bounds)\n        ) AS geom\n    FROM sampled\n)\nSELECT ST_AsMVT(encoded, 'features') AS tile\nFROM encoded\nWHERE geom IS NOT NULL;\n```\n\n`ST_AsMVTGeom` converts the simplified geometries to tile coordinates and clips them; [`ST_AsMVT`](/docs/2.0/core_extensions/spatial/functions.html#st_asmvt) packages them and their attributes into a Mapbox Vector Tile (MVT). The production implementation also handles invalid geometries, filters out very small lines and polygons, and caches generated tiles.\n\nAn HTTP server running locally as part of the Electron desktop app serves the tiles requested by the map.\n\n## Graph Analytics on the Fly with Cosmograph\n\nSQLRooms also powers the analytical workspace in [Cosmograph](https://cosmograph.app), a browser-based graph exploration tool developed by [Nikita Rokotyan](https://rokotyan.com/) and Thor Whalen. Ilya helped integrate SQLRooms into the application, which can visualize graphs with millions of edges.\n\n[Video 3: shown in the media section above]\n\nCosmograph has been tested with datasets ranging from tens of thousands of points to several million. DuckDB-Wasm handles data loading and SQL queries in a background worker, helping keep the interface responsive. It lets the app filter and summarize data as users explore, while columnar query results reduce the conversion work needed to prepare data for visualization.\n\n## When the Agent Writes the SQL\n\nSQLRooms also supports AI-assisted analysis. **“The combination of SQL and AI agents is actually quite powerful,”** Ilya says. **“SQL has a long history, there are many documents on the web explaining how to use it, so LLMs are pretty good at generating it.”**\n\nUsers can ask questions in natural language. The assistant generates SQL queries and chart specifications, which the application executes and renders locally. The source dataset can stay on the user’s machine, while database schemas and selected query results can be shared with the AI provider to help answer questions.\n\nIn the Spatial Desktop example below, the assistant generates SQL to retrieve data from available sources and calculate a combined score for wine-growing suitability across Italy. The resulting map is accompanied by AI-generated regional analysis:\n\n[Image 2: shown in the media section above]\n\n## Where SQLRooms Goes Next\n\nIlya is extending SQLRooms’ workspace model so users can bring their analysis together in interactive documents. These documents combine text with blocks such as charts or SQL queries, letting users explain their findings alongside the analysis that produced them.\n\n[Video 4: shown in the media section above]\n\nIlya is also exploring other ways to work with these analytical projects. At [DuckCon #7](/events/2026/06/24/duckcon7/) in Amsterdam, he demonstrated a SQLRooms command-line tool with a notebook-style interface. It saves both the data and the analysis artifacts in a single DuckDB database file. The goal is to let users continue the same project through a graphical application or the command line. The CLI design is still evolving.\n\n## Learn More\n\nIlya’s [five-minute talk](https://www.youtube.com/watch?v=fV1LXnPl4ng) from DuckCon #7 gives a short tour of this direction.\n\nSQLRooms is open source and available at [sqlrooms.org](https://sqlrooms.org). Its [examples page](https://sqlrooms.org/examples) is a good place to start. [Flowmap City](https://flowmap.city/), [Foursquare Spatial Desktop](https://foursquare.com/products/spatial-desktop/), and [Cosmograph](https://cosmograph.app) are free to try.\n\nWe would like to thank Ilya for the conversation. You can follow his writing on DuckDB and SQLRooms on [his website](https://ilya.boyandin.me/). And if you are reading this, are using DuckDB, and would like to share your story, drop us a line at [geertjan@ducklabs.com](mailto:geertjan@ducklabs.com).",
+    "media": [
+      {
+        "id": "duckdb_local_analytics_header",
+        "type": "image",
+        "url": "https://duckdb.org/images/blog/thumbs/local-analytics-without-a-database-server.svg"
+      },
+      {
+        "id": "duckdb_flowmap_city_video",
+        "type": "video",
+        "url": "https://blobs.duckdb.org/videos/flowmap-city.mp4"
+      },
+      {
+        "id": "duckdb_fsq_spatial_desktop_img",
+        "type": "image",
+        "url": "https://duckdb.org/images/blog/local-analytics/fsq-spatial-desktop-earthquakes.webp",
+        "alt": "Foursquare Spatial Desktop"
+      },
+      {
+        "id": "duckdb_dynamic_tiling_video",
+        "type": "video",
+        "url": "https://blobs.duckdb.org/videos/fsq-spatial-desktop-dynamic-tiling-4-1500.mp4"
+      },
+      {
+        "id": "duckdb_cosmograph_video",
+        "type": "video",
+        "url": "https://blobs.duckdb.org/videos/cosmograph-2.0.mp4"
+      },
+      {
+        "id": "duckdb_italy_wine_img",
+        "type": "image",
+        "url": "https://duckdb.org/images/blog/local-analytics/italy-wine-suitability-with-sidebar.webp",
+        "alt": "Foursquare Spatial Desktop showing a wine-growing suitability map of Italy alongside AI-generated regional analysis"
+      },
+      {
+        "id": "duckdb_sqlrooms_document_video",
+        "type": "video",
+        "url": "https://blobs.duckdb.org/videos/sqlrooms-cars-document.mp4"
+      }
+    ],
+    "markdown_base_url": "https://duckdb.org/2026/11/12/local-analytics-without-a-database-server.html",
+    "note": "原文的题图、两张截图和四段视频已移到上方媒体区，正文中以 [Header image]、[Image N]、[Video N] 标出原位置；作者头像、目录和推荐文章等页面元素未收录；页面中被混淆显示的联系邮箱已还原为原地址。"
+  },
+  "body_md": "DuckDB 官方博客发布了一篇用户访谈，主角是 SQLRooms 的作者 Ilya Boyandin。他的做法是把分析查询放在用户自己的浏览器或电脑上，用 DuckDB 代替远程数据库服务器：交互式地图、图谱探索，以及 AI 辅助分析，数据都可以留在本机。文章由 Ilya Boyandin、Geertjan Wielenga 和 Tim Cox 署名。\n\nIlya 对本地数据的态度很明确，原话的意思是：**你应该拥有自己的数据。数据可以放在你自己的电脑上，不是所有东西都必须放在云端。它可以通过云同步，但什么时候留在本地、什么时候不留，由你决定。**\n\n[Ilya Boyandin](https://www.linkedin.com/in/ilyabo/) 是一名软件工程师，做过 [SQLRooms](https://sqlrooms.org)、[FlowmapBlue](https://flowmap.blue) 和 [Flowmap City](https://flowmap.city/)。他曾在 Unfolded 做地理空间数据分析，这家公司由开源可视化项目 [deck.gl](https://deck.gl) 和 [kepler.gl](https://kepler.gl) 背后的团队创立，后来被 Foursquare 收购。\n\n## 起点：一个预算很少的副业项目\n\nIlya 第一次用 DuckDB，是在 [Flowmap City](https://flowmap.city/) 里。这是一个[可视化人员出行流动](https://ilya.boyandin.me/p/flowmap-city)的副业项目，他至今还在维护。\n\n项目预算很少，Ilya 希望它运维简单、基础设施尽量少。DuckDB 的 [WebAssembly 版本](https://duckdb.org/docs/2.0/clients/wasm/overview.html)让应用可以在用户浏览器里直接跑分析查询，不需要数据库服务器。用户上传的数据集以 Parquet 文件存放在 S3 上；有人打开项目时，应用通过[预签名 URL](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ShareObjectPreSignedURL.html) 把数据加载进 DuckDB-Wasm。\n\n用户在 Flowmap City 里平移、缩放或修改筛选条件时，DuckDB-Wasm 会在浏览器里执行 SQL 查询来更新地图。一次交互就可能触发好几条查询，为当前视口准备数据。\n\nIlya 的解释是：**“现在我们可以在浏览器里完成大部分分析和可视化。这让基础设施需求保持在低位，而且可能更快，因为查询不需要往返服务器。”**\n\n## 从副业项目抽出 SQLRooms\n\nFlowmap City 里有不少数据加载和界面代码，用处并不限于出行分析。Ilya 把这些部分抽出来，做成了 SQLRooms，并继续作为开源项目开发。\n\n[SQLRooms](https://sqlrooms.org/) 是一个模块化工具包，用于在 React 里构建由 DuckDB 驱动的分析应用。它提供加载数据、编写 SQL、展示表格、制作可视化和接入 AI 助手的构件，开发者可以把这些构件和自己的组件组合使用。\n\n这些组件在一个 *Room* 里协同工作。Room 是一个工作区，包含数据集、分析产物（比如保存的查询、图表、地图和文档），以及把它们连在一起的应用状态。SQLRooms 通过一个共享的 DuckDB 连接负责执行查询，开发者可以把精力放在用户如何探索数据、如何在已有工作上继续推进。\n\nDuckDB 既可以通过 WebAssembly 直接在浏览器里运行，也可以在桌面应用里以原生方式运行在用户电脑上，两种方式都不需要远程数据库服务器。\n\nIlya 对本地优先（local-first）软件的兴趣，塑造了这个框架的形态，也就是开头那段关于“拥有自己的数据”的话。\n\n## 在 Foursquare 落到桌面应用\n\n在 Foursquare，Ilya 的团队一直在开发 [Foursquare Spatial Desktop](https://ilya.boyandin.me/p/fsq-spatial-desktop)。这是一个用 SQLRooms 构建的地理空间数据探索桌面应用，把 DuckDB 的分析引擎和 [kepler.gl](https://kepler.gl/) 的可视化工具结合在一起。它建立在团队做 kepler.gl 和 [Foursquare Studio](https://studio.foursquare.com)（Foursquare 的云端地理空间分析平台）的经验之上。\n\nIlya 说：**“对这个产品来说，把 DuckDB 嵌入桌面应用再合适不过。它让用户可以在本地执行分析流程。”** 他也提到，SQLite 同样可以嵌入，但它不是列式存储，设计初衷也不是针对较大数据集做分析。\n\nIlya 补充说，现在的笔记本电脑算力可观，GPU 也很适合做可视化。**“我看到人们重新对那种把数据和计算留在用户自己机器上的应用产生兴趣。”**\n\n### 按需生成地图瓦片\n\nSpatial Desktop 用 [deck.gl](https://deck.gl/) 渲染地图，但一次画几百万个要素会拖慢速度。应用的办法是用 DuckDB 的[空间扩展](https://duckdb.org/docs/2.0/core_extensions/spatial/overview.html)做动态切片。\n\n地图瓦片通常会提前生成好，以便快速加载。Spatial Desktop 还能用本地 DuckDB 数据库，根据用户自己的数据集按需生成瓦片，这样用户不用先准备瓦片集就能开始探索。对每个被请求的瓦片，它会选出附近的要素，并随机抽样，让密集的瓦片保持在可处理的规模；它还会按缩放级别简化线和多边形，用户放大得越多，保留的细节越多。\n\n下面这段简化后的查询展示了主要步骤。它假设源几何数据已经是 Web Mercator 坐标（`EPSG:3857`）。瓦片宽度同时决定两件事：搜索范围外围的一小圈缓冲区，以及大约相当于半个像素的简化容差。\n\n```\nWITH tile AS (\n    SELECT\n        ST_TileEnvelope(z, x, y) AS bounds,\n        (ST_XMax(bounds) - ST_XMin(bounds)) / 256.0 AS meters_per_pixel\n),\ncandidates AS (\n    SELECT\n        f.id, f.geometry, tile.bounds,\n        GREATEST(meters_per_pixel * 0.5, 0.1) AS tolerance\n    FROM features f, tile\n    WHERE ST_Intersects_Extent(\n        f.geometry,\n        ST_Buffer(tile.bounds, meters_per_pixel * 16)\n    )\n),\nsampled AS (\n    SELECT *\n    FROM candidates\n    USING SAMPLE reservoir(50000 ROWS)\n),\nencoded AS (\n    SELECT\n        id,\n        ST_AsMVTGeom(\n            ST_SimplifyPreserveTopology(geometry, tolerance),\n            ST_Extent(bounds)\n        ) AS geom\n    FROM sampled\n)\nSELECT ST_AsMVT(encoded, 'features') AS tile\nFROM encoded\nWHERE geom IS NOT NULL;\n```\n\n`ST_AsMVTGeom` 把简化后的几何转换成瓦片坐标并做裁剪；[`ST_AsMVT`](https://duckdb.org/docs/2.0/core_extensions/spatial/functions.html#st_asmvt) 把这些几何及其属性打包成 Mapbox Vector Tile（MVT）。生产环境的实现还会处理无效几何、过滤掉非常小的线和多边形，并缓存已生成的瓦片。\n\n地图请求的瓦片，由 Electron 桌面应用内部在本地运行的一个 HTTP 服务器提供。\n\n## Cosmograph：浏览器里探索百万级边的图谱\n\nSQLRooms 也驱动着 [Cosmograph](https://cosmograph.app) 的分析工作区。Cosmograph 是一个基于浏览器的图谱探索工具，由 [Nikita Rokotyan](https://rokotyan.com/) 和 Thor Whalen 开发，能可视化有数百万条边的图。Ilya 参与了把 SQLRooms 集成进这个应用的工作。\n\nCosmograph 测试过的数据集，从几万个点到几百万个点不等。DuckDB-Wasm 在后台 worker 里负责数据加载和 SQL 查询，帮助界面保持流畅。用户探索时，应用可以借它筛选和汇总数据；列式的查询结果也减少了为可视化准备数据所需的转换工作。\n\n## 让 AI 智能体写 SQL\n\nSQLRooms 也支持 AI 辅助分析。Ilya 说：**“SQL 和 AI 智能体的组合其实相当强大。SQL 历史很长，网上有大量讲怎么用它的文档，所以大模型很擅长生成 SQL。”**\n\n用户可以用自然语言提问。助手生成 SQL 查询和图表规格，由应用在本地执行和渲染。源数据集可以留在用户电脑上，只把数据库结构和部分选定的查询结果发给 AI 服务商，帮助回答问题。\n\n在下面这个 Spatial Desktop 示例里，助手生成 SQL，从可用数据源取数，并计算意大利各地适合种植葡萄的综合评分。生成的地图旁边附有 AI 生成的分区域分析。\n\n## SQLRooms 的下一步\n\nIlya 正在扩展 SQLRooms 的工作区模型，让用户可以把分析汇总到交互式文档里。这些文档把文字和图表、SQL 查询等区块组合在一起，用户可以在产出结论的分析旁边直接解释自己的发现。\n\nIlya 也在探索使用这些分析项目的其他方式。在阿姆斯特丹举办的 [DuckCon #7](https://duckdb.org/events/2026/06/24/duckcon7/) 上，他演示了一个带笔记本式界面的 SQLRooms 命令行工具，它把数据和分析产物都保存在同一个 DuckDB 数据库文件里。目标是让用户可以在图形应用和命令行之间切换，继续同一个项目。这个 CLI 的设计仍在演变中。\n\n## 延伸阅读\n\nIlya 在 DuckCon #7 上有一个[五分钟的演讲](https://www.youtube.com/watch?v=fV1LXnPl4ng)，简要介绍了这个方向。\n\nSQLRooms 是开源的，地址是 [sqlrooms.org](https://sqlrooms.org)，可以从它的[示例页](https://sqlrooms.org/examples)入手。[Flowmap City](https://flowmap.city/)、[Foursquare Spatial Desktop](https://foursquare.com/products/spatial-desktop/) 和 [Cosmograph](https://cosmograph.app) 都可以免费试用。Ilya 关于 DuckDB 和 SQLRooms 的文章发布在[他的个人网站](https://ilya.boyandin.me/)上。\n\nDuckDB 团队在文末感谢 Ilya 接受访谈，并邀请正在使用 DuckDB、愿意分享自己故事的读者发邮件给 [geertjan@ducklabs.com](mailto:geertjan@ducklabs.com)。",
+  "rewrite_media": [
+    {
+      "media_id": "duckdb_local_analytics_header",
+      "placement": "after_body",
+      "placement_note": "原文附带媒体；未核验其与具体段落的对应关系。",
+      "evidence": "source_metadata_only"
+    },
+    {
+      "media_id": "duckdb_flowmap_city_video",
+      "placement": "after_paragraph",
+      "after_md": "用户在 Flowmap City 里平移、缩放或修改筛选条件时，DuckDB-Wasm 会在浏览器里执行 SQL 查询来更新地图。一次交互就可能触发好几条查询，为当前视口准备数据。",
+      "evidence": "source_position_verified"
+    },
+    {
+      "media_id": "duckdb_fsq_spatial_desktop_img",
+      "placement": "after_paragraph",
+      "after_md": "Ilya 说：**“对这个产品来说，把 DuckDB 嵌入桌面应用再合适不过。它让用户可以在本地执行分析流程。”** 他也提到，SQLite 同样可以嵌入，但它不是列式存储，设计初衷也不是针对较大数据集做分析。",
+      "evidence": "source_position_verified"
+    },
+    {
+      "media_id": "duckdb_dynamic_tiling_video",
+      "placement": "after_paragraph",
+      "after_md": "地图瓦片通常会提前生成好，以便快速加载。Spatial Desktop 还能用本地 DuckDB 数据库，根据用户自己的数据集按需生成瓦片，这样用户不用先准备瓦片集就能开始探索。对每个被请求的瓦片，它会选出附近的要素，并随机抽样，让密集的瓦片保持在可处理的规模；它还会按缩放级别简化线和多边形，用户放大得越多，保留的细节越多。",
+      "evidence": "source_position_verified"
+    },
+    {
+      "media_id": "duckdb_cosmograph_video",
+      "placement": "after_paragraph",
+      "after_md": "SQLRooms 也驱动着 [Cosmograph](https://cosmograph.app) 的分析工作区。Cosmograph 是一个基于浏览器的图谱探索工具，由 [Nikita Rokotyan](https://rokotyan.com/) 和 Thor Whalen 开发，能可视化有数百万条边的图。Ilya 参与了把 SQLRooms 集成进这个应用的工作。",
+      "evidence": "source_position_verified"
+    },
+    {
+      "media_id": "duckdb_italy_wine_img",
+      "placement": "after_paragraph",
+      "after_md": "在下面这个 Spatial Desktop 示例里，助手生成 SQL，从可用数据源取数，并计算意大利各地适合种植葡萄的综合评分。生成的地图旁边附有 AI 生成的分区域分析。",
+      "evidence": "source_position_verified"
+    },
+    {
+      "media_id": "duckdb_sqlrooms_document_video",
+      "placement": "after_paragraph",
+      "after_md": "Ilya 正在扩展 SQLRooms 的工作区模型，让用户可以把分析汇总到交互式文档里。这些文档把文字和图表、SQL 查询等区块组合在一起，用户可以在产出结论的分析旁边直接解释自己的发现。",
+      "evidence": "source_position_verified"
+    }
+  ]
+}

@@ -1,5 +1,47 @@
 [
   {
+    "id": "duckdb-local-analytics-sqlrooms",
+    "date": "2026-11-12",
+    "title": "不用数据库服务器做本地分析：SQLRooms 作者讲 DuckDB 在浏览器和桌面端的用法",
+    "dek": "DuckDB 官方博客访谈 Ilya Boyandin：从 Flowmap City 的 DuckDB-Wasm，到 Foursquare Spatial Desktop 的按需切片、Cosmograph 的百万级图谱和让 AI 写 SQL，数据都留在用户机器上。",
+    "url": "/a/duckdb-local-analytics-sqlrooms",
+    "source_url": "https://duckdb.org/2026/11/12/local-analytics-without-a-database-server.html",
+    "tags": [
+      "数据",
+      "DuckDB",
+      "本地优先",
+      "地理空间"
+    ]
+  },
+  {
+    "id": "kiraly-elastic-ethereum",
+    "date": "2026-11-11",
+    "title": "弹性以太坊：Csaba Kiraly 主张按实测压力调节出块容量，借鉴 TCP 拥塞控制避免拥塞崩溃",
+    "dek": "ethresear.ch 观点长文：以太坊容量今天是预先配置的开环系统；作者用两周主网传播数据说明固定余量的代价，提出以未最终化工作的规模和潜在损失作为控制信号，并列出信号共识、对手操纵等开放问题。",
+    "url": "/a/kiraly-elastic-ethereum",
+    "source_url": "https://ethresear.ch/t/elastic-ethereum/26236",
+    "tags": [
+      "Web3",
+      "以太坊",
+      "共识",
+      "网络"
+    ]
+  },
+  {
+    "id": "simonw-beep-locator-claude-ears",
+    "date": "2026-11-09",
+    "title": "Simon Willison 用 Claude Code 搭了个多设备声学定位系统，找到了储物间里哔哔响的旧报警器",
+    "dek": "五台手机、平板和笔记本当麦克风，WebSocket 热更新代码，Fable 5.2 边跑边改；系统把声源定位到约 40 厘米范围内。Simon 称之为给 Claude Code 装上了耳朵。",
+    "url": "/a/simonw-beep-locator-claude-ears",
+    "source_url": "https://simonwillison.net/2026/Nov/9/mysterious-beeps/",
+    "tags": [
+      "AI",
+      "AI coding",
+      "Claude Code",
+      "智能体"
+    ]
+  },
+  {
     "id": "duckdb-ducks-in-a-column",
     "date": "2026-11-10",
     "title": "DuckDB 官方导览：列式存储下的一组 SQL 写法，从直接查文件到写好 Parquet",
