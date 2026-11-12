@@ -1,5 +1,33 @@
 [
   {
+    "id": "fei-wu-one-vs-multidimensional-fees-eip7999",
+    "date": "2026-11-12",
+    "title": "一个基础费管不住两种资源：EIP-7999 多维定价与一维费用机制的模拟对比",
+    "dek": "Fei Wu 在 ethresear.ch 发文：提高目标比例或改用 EIP-4844 式更新，都只能让一维机制在执行量、状态增长和拥堵之间换取平衡；在其标定的需求模型下，EIP-7999 在相近或更低拥堵下交付更多执行量，状态增长保持在每年 120 GiB 目标。",
+    "url": "/a/fei-wu-one-vs-multidimensional-fees-eip7999",
+    "source_url": "https://ethresear.ch/t/more-meters-or-more-prices-one-vs-multi-dimensional-fee-mechanisms-on-ethereum/26244",
+    "tags": [
+      "Web3",
+      "以太坊",
+      "费用市场",
+      "EIP-7999"
+    ]
+  },
+  {
+    "id": "ibm-granite-llmon-markup-language",
+    "date": "2026-11-12",
+    "title": "IBM 发布 LLMON：用特殊 token 把指令和数据分开，Granite 4.1 预览模型抵御提示注入",
+    "dek": "IBM Granite 团队推出面向大模型的标记语言 LLMON 和两个 Granite 4.1 预览模型：结构分隔符改用保留 token，exec 块绑定指令与数据；团队称在 OPI 基准上比所测最好的前沿模型多挡住 47% 的注入攻击，通用能力与 Instruct 版持平，仍是实验性预览。",
+    "url": "/a/ibm-granite-llmon-markup-language",
+    "source_url": "https://huggingface.co/blog/ibm-granite/llmon-an-llm-native-markup-language-now-in-granite",
+    "tags": [
+      "AI",
+      "大模型",
+      "提示注入",
+      "开源模型"
+    ]
+  },
+  {
     "id": "duckdb-local-analytics-sqlrooms",
     "date": "2026-11-12",
     "title": "不用数据库服务器做本地分析：SQLRooms 作者讲 DuckDB 在浏览器和桌面端的用法",
