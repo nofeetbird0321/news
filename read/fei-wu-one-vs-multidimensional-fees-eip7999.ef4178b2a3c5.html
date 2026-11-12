@@ -1,0 +1,221 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>一个基础费管不住两种资源：EIP-7999 多维定价与一维费用机制的模拟对比 · 新知</title><meta name="robots" content="noindex"></head><body><article class="article-reader" data-article-id="fei-wu-one-vs-multidimensional-fees-eip7999">
+<a class="article-back" href="/">← 返回选刊</a>
+<header class="article-header"><p class="article-kicker">Fei Wu / 文章</p><h1>一个基础费管不住两种资源：EIP-7999 多维定价与一维费用机制的模拟对比</h1><p class="article-dek">Fei Wu 在 ethresear.ch 发文：提高目标比例或改用 EIP-4844 式更新，都只能让一维机制在执行量、状态增长和拥堵之间换取平衡；在其标定的需求模型下，EIP-7999 在相近或更低拥堵下交付更多执行量，状态增长保持在每年 120 GiB 目标。</p><div class="article-meta"><time datetime="2026-11-13">本站收录 2026年11月13日 · 周五</time><span>原文发布 2026年11月12日 · 周四</span><span>原作者：Fei Wu</span><span>中文改写：<a href="/about">新知</a></span><span>Web3 · 以太坊 · 费用市场 · EIP-7999</span></div></header>
+<nav class="reader-tabs" aria-label="文章版本与来源"><div data-tabs><a href="#rewrite" id="tab-rewrite" data-view="rewrite">中文改写</a><a href="#original" id="tab-original" data-view="original">原文</a></div><a class="reader-source" href="https://ethresear.ch/t/more-meters-or-more-prices-one-vs-multi-dimensional-fee-mechanisms-on-ethereum/26244" target="_blank" rel="noopener noreferrer">原文链接 ↗</a><div class="reading-position" hidden><progress max="100" value="0" aria-label="当前版本阅读进度"></progress><span data-reading-percent aria-hidden="true">0%</span></div></nav>
+<section class="reader-panel" id="rewrite" data-reader-panel="rewrite" aria-label="中文改写"><h2 class="section-heading">中文改写</h2><div class="prose"><p>在以太坊上，把执行 gas 和状态增长放在同一个基础费（base fee）下定价，会出现一个问题：费用只能追着更紧的那项资源走。Fei Wu 在 ethresear.ch 发布的新帖用模拟数据对比了两条路线：继续改进一维费用机制，或者转向 EIP-7999 的多维定价。在标定的需求模型下，<strong>EIP-7999 在拥堵相近或更低的情况下交付更多执行量，同时把状态增长保持在每年 120 GiB 的目标上</strong>。</p>
+<p>这项工作部分完成于作者在以太坊基金会（EF）实习期间，作者感谢导师 misilva73 的讨论和意见。帖子把此前三篇分析（EIP-7999 多维费用市场的均衡分析、动态模拟，以及与 Glamsterdam 之后一维费用市场的对比）合并扩展成一篇论文：《More Meters or More Prices? One- vs. Multi-dimensional Fee Mechanisms on Ethereum》（arXiv 2610.33455）。帖中结果可以用作者公开的代码仓库复现。</p>
+<h2>起点：最强的一维基准，仍有两项资源达不到目标</h2>
+<p>上一篇帖子比较了三个一维基准：基线方案（每字节 64 gas 的下限，<code>CPSB = 1530</code>）、下限调整加 EIP-8368、下限调整加 EIP-8372。按当前的资源需求，最强的是<strong>下限调整加 EIP-8372</strong>，论文称之为“归一化基准”。它的做法是：交易下限价格随每种传播时间分配（propagation allocation）调整；EIP-8372 把 <code>CPSB</code> 和状态 gas 上限按同一个系数缩放，让常规 gas 和状态 gas 在均衡时于同一个基础费下达到各自目标。它保留 EIP-1559 的目标与上限之比 1/2，也保留 EIP-1559 的更新规则。</p>
+<p>在区块层面的需求波动下，这个基准每个区块交付 1.519 亿至 1.779 亿执行 gas，但常规 gas 和归一化后的状态 gas 平均都低于目标，状态增长为每年 86.0 至 88.1 GiB，目标是 120 GiB。</p>
+<p>论文在此基础上继续推进：先把目标与上限之比提高到最多 4/5，看能否交付更多执行量；发现 EIP-1559 的更新规则成了约束后，换成 EIP-4844 的伪指数（fake exponential）更新；最后与 EIP-7999 比较。全文用<strong>近上限区块</strong>的占比衡量拥堵，指 gas 用量达到某个硬上限 98% 以上的区块。</p>
+<h2>提高目标比例：执行量上去了，状态增长和拥堵变差</h2>
+<p>作者把下限调整加 EIP-8372 的目标与上限之比依次设为 1/2、3/5、2/3、3/4、4/5，每种传播时间分配下的 gas 上限和下限价格不变。每个比例下都重新标定 <code>CPSB</code>，让达到目标时的状态用量仍对应每年 120 GiB，并重新计算 EIP-8372 的缩放系数。</p>
+<section class="rewrite-source-media" aria-label="原文媒体"><div class="original-media">
+<figure class="media-figure" data-media-id="eth_fee_fig1"><div class="media-frame"><img src="https://ethresear.ch/uploads/default/original/3X/f/4/f401aec3c50eabcb51783d5371c86ef094f17da9.png" data-original-src="https://ethresear.ch/uploads/default/original/3X/f/4/f401aec3c50eabcb51783d5371c86ef094f17da9.png" alt="Figure 1" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://ethresear.ch/t/more-meters-or-more-prices-one-vs-multi-dimensional-fee-mechanisms-on-ethereum/26244" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div></section>
+<p>每种分配下，执行量都随比例上升，到 4/5 时达到 1.990 亿至 2.150 亿。代价是状态增长离目标更远，降到每年 56.7 至 68.7 GiB；区块也更拥堵，4/5 时有 13.2% 至 20.6% 的区块接近上限，1/2 时约为 4%。</p>
+<p><strong>原因在于 EIP-1559 的更新规则无法把费用降到新的均衡点。</strong> 目标越高，出清的费用越低：在 4/5 时，两条分支同时达到目标的基础费只有 2.4 至 7.2 wei。按 EIP-1559，一个低于目标的区块会把基础费降低 ⌊b_t(T_G − G_t) / 8T_G⌋，其中 G_t 是两条分支中用量较大的那一条。除非区块比目标少出至少 8/b_t 的比例，这个降幅都会被取整成零。费用一旦低于 8 wei，任何区块都无法再让它下降，而每个高于目标的区块都会让它至少涨 1 wei。</p>
+<p>模拟中费用从未低于 8 wei，平均为 18.3 至 27.2 wei，是均衡值的四到八倍。按均衡计算，4/5 的设计本应交付 2.45 亿至 2.80 亿执行量，模拟中只有 1.990 亿至 2.150 亿。</p>
+<p>费用高于均衡会压缩所有资源，状态被压得最多，因为它对价格最敏感。比例提高还降低了每块状态字节上限相对目标的倍数，从 1/2 时的 2 倍降到 4/5 时的 1.25 倍，状态创建的突发会被截断。</p>
+<h2>换成 EIP-4844 式更新：费用降下来了，拥堵翻倍</h2>
+<p>为了让费用能降到这么低，作者在 4/5 比例下把 EIP-1559 更新换成 EIP-4844 的持续超额 gas 计数器加伪指数函数，配置和需求路径保持不变：x_{t+1} = max(0, x_t + G_t − T_G)，b_t = fake_exponential(1, x_t, 8T_G)。计数器会保留 EIP-1559 取整丢掉的小额缺口，分母 8T_G 让它的响应速度与 EIP-1559 一致。</p>
+<p>下表是两种更新规则在 4/5 比例下的对比，每格箭头前为 EIP-1559，箭头后为 EIP-4844 式：</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>传播时间</th>
+<th align="right">执行量（百万 gas）</th>
+<th align="right">状态增长（GiB/年）</th>
+<th align="right">近上限区块</th>
+<th align="right">平均基础费（wei）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3.0 秒</td>
+<td align="right">206.4 → 225.9</td>
+<td align="right">64.6 → 96.0</td>
+<td align="right">17.7% → 40.8%</td>
+<td align="right">22.3 → 6.6</td>
+</tr>
+<tr>
+<td>3.5 秒</td>
+<td align="right">215.0 → 244.2</td>
+<td align="right">56.8 → 94.0</td>
+<td align="right">13.2% → 39.1%</td>
+<td align="right">18.3 → 3.6</td>
+</tr>
+<tr>
+<td>4.0 秒</td>
+<td align="right">214.1 → 243.6</td>
+<td align="right">56.7 → 94.0</td>
+<td align="right">13.4% → 38.8%</td>
+<td align="right">18.8 → 3.7</td>
+</tr>
+<tr>
+<td>4.5 秒</td>
+<td align="right">208.5 → 232.5</td>
+<td align="right">61.1 → 95.2</td>
+<td align="right">16.0% → 39.6%</td>
+<td align="right">21.5 → 5.4</td>
+</tr>
+<tr>
+<td>5.0 秒</td>
+<td align="right">199.0 → 214.8</td>
+<td align="right">68.7 → 95.6</td>
+<td align="right">20.6% → 39.9%</td>
+<td align="right">27.2 → 10.5</td>
+</tr>
+</tbody>
+</table>
+<p>费用接近均衡后，执行量和状态增长都回升了，但还剩两个问题。</p>
+<p><strong>拥堵大幅上升。</strong> 4/5 比例下上限只是目标的 1.25 倍。费用更低时，需求突发更容易顶到上限，38.8% 至 40.8% 的区块接近上限。</p>
+<p><strong>两条分支仍然都低于目标。</strong> 常规 gas 平均为目标的 85.8% 至 87.1%，归一化状态 gas 为 78.3% 至 80.0%。费用跟随每个区块中较大的那条分支，这条分支现在平均达到目标的 98.8% 至 100.0%；只要一条分支高于目标，另一条也得付更高的费用。<strong>一个费用能让较大的分支保持在目标上，但无法同时照顾两条。</strong> 在 1/2 比例下，同样更换更新规则几乎没有影响（执行量变化不到 150 万），因为那里的费用在 48 至 191 wei，取整很少起作用。</p>
+<h2>与 EIP-7999 对比</h2>
+<p>作者从上一篇帖子测试过的执行目标和数据目标中，为每种传播时间分配挑出两个 EIP-7999 配置：</p>
+<ul>
+<li><strong>保守配置</strong>：位于执行与数据前沿之内、均衡执行费高于 1 wei、近上限区块占比不超过历史水平 4.73%（2026 年 2 月至 5 月的 860,505 个主网区块）的配置中，执行量最高的一个。</li>
+<li><strong>最大吞吐配置</strong>：平均执行量最高的配置。</li>
+</ul>
+<p>这里的保守规则比前几篇帖子的“历史锚定”规则更严格，后者允许近上限区块比历史占比多 20%，所以部分选择和数字略有不同。</p>
+<section class="rewrite-source-media" aria-label="原文媒体"><div class="original-media">
+<figure class="media-figure" data-media-id="eth_fee_fig2"><div class="media-frame"><img src="https://ethresear.ch/uploads/default/original/3X/3/1/319cae8375b569109f858f2ecf9a8252f1e2c29e.png" data-original-src="https://ethresear.ch/uploads/default/original/3X/3/1/319cae8375b569109f858f2ecf9a8252f1e2c29e.png" alt="Figure 2" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://ethresear.ch/t/more-meters-or-more-prices-one-vs-multi-dimensional-fee-mechanisms-on-ethereum/26244" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="eth_fee_fig3"><div class="media-frame"><img src="https://ethresear.ch/uploads/default/original/3X/3/1/318b00c186da6327d8d7d7479743079d2921196a.png" data-original-src="https://ethresear.ch/uploads/default/original/3X/3/1/318b00c186da6327d8d7d7479743079d2921196a.png" alt="fig3_near_limit_comparison" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://ethresear.ch/t/more-meters-or-more-prices-one-vs-multi-dimensional-fee-mechanisms-on-ethereum/26244" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div></section>
+<p>EIP-7999 在所有配置中都把状态增长保持在每年 120 GiB 的目标上，下限调整加 EIP-8372 的各个变体只有 56.7 至 96.0 GiB。</p>
+<p><strong>拥堵相近且都较低时，EIP-7999 多交付 4% 至 34% 的执行量。</strong> 保守配置和 1/2 比例下的下限调整加 EIP-8372，近上限区块分别为 1.9% 至 4.4% 和 4.0% 至 4.5%，都接近或低于历史占比。在每种分配下，保守配置多交付 680 万至 5600 万执行 gas。</p>
+<p><strong>提高一维方案的目标比例，只能靠增加拥堵来缩小部分执行量差距。</strong> 在 4/5 时，下限调整加 EIP-8372 在 3 秒分配下比保守配置多 3280 万，3.5 秒下多 1700 万，更长的分配下则落后；但它有 13.2% 至 20.6% 的区块接近上限，保守配置只有 1.9% 至 4.4%。</p>
+<p><strong>拥堵更高时，EIP-7999 仍然交付更多。</strong> 最大吞吐配置比 4/5 比例的下限调整加 EIP-8372 多交付 4650 万至 7200 万执行量，近上限区块略多（16.6% 至 32.1%，对比 13.2% 至 20.6%）。与 EIP-4844 式变体相比，它们多交付 1950 万至 5620 万，近上限区块反而更少（16.6% 至 32.1%，对比 38.8% 至 40.8%）。</p>
+<p>作者还检查了模拟过的每一次一维运行：上一篇的基线和下限调整加 EIP-8368 基准，五种目标比例下的下限调整加 EIP-8372，以及它的 EIP-4844 式变体，每种都覆盖五种传播时间分配。对每一次运行，同一分配下至少有一个位于执行与数据前沿之内的 EIP-7999 测试配置，执行量更多、状态增长保持在目标上、处于硬上限的区块占比不更高。最小的领先幅度是 680 万，出现在 1/2 比例、3 秒分配下的下限调整加 EIP-8372。</p>
+<h2>局限</h2>
+<p><strong>需求标定。</strong> 结果依赖于用 2025 年 2 月和 7 月两次 gas 上限提高标定的需求模型，而测试的执行目标远超已观测到的需求。论文用这两次提高前后 21 天、60 天、75 天窗口估计的弹性做了稳健性检验。在每种标定下，基线和下限调整加 EIP-8368 基准里决定共享基础费的仍然是状态；为每种标定重新挑选目标的 EIP-7999，仍比下限调整加 EIP-8372 及其 EIP-4844 式变体交付更多执行量。领先幅度取决于标定，执行需求对价格越不敏感，领先通常越小。</p>
+<p><strong>只测了这些变体。</strong> 作者只测试了文中描述的一维变体，没有穷尽所有设计。论文还显示，当需求偏离标定值时，一次性标定的 EIP-8372 无法再让两条分支对齐；随需求变化重新标定缩放系数的机制，作者没有测试。</p>
+<h2>结论</h2>
+<p>提高目标比例和改进更新规则都能帮到一维机制，但各自带来新的代价。沿用 EIP-1559 更新时，更高的目标比例会压低状态增长、增加拥堵；EIP-4844 式更新恢复了状态增长，代价是让多得多的区块顶到上限。单一基础费跟随瓶颈资源，两种改动都无法让两项资源同时接近目标。作者的结论是：<strong>在标定的需求模型下，EIP-7999 交付更多执行量，状态增长保持在目标上，拥堵相近或更低，这支持以太坊在扩容中从“分开计量”转向“分开定价”。</strong> 关注 Glamsterdam 之后费用市场设计的读者，可以直接用作者的仓库复现这些模拟，并留意结论对需求标定的依赖。</p>
+</div></section>
+<section class="reader-panel" id="original" data-reader-panel="original" aria-label="原文">
+<h2 class="section-heading">原文</h2><p class="completeness-note">原文取自 ethresear.ch 帖子的 Markdown 源（/raw/26244）；原帖三张图已移到上方媒体区，正文中以 [Figure N] 标出原位置，图注保留在原位；数学公式保持原帖的 LaTeX 源文本；仅收录主楼。</p><h3 class="original-title">More Meters or More Prices? One- vs. Multi-dimensional Fee Mechanisms on Ethereum</h3>
+<div class="original-media">
+<figure class="media-figure" data-media-id="eth_fee_fig1"><div class="media-frame"><img src="https://ethresear.ch/uploads/default/original/3X/f/4/f401aec3c50eabcb51783d5371c86ef094f17da9.png" data-original-src="https://ethresear.ch/uploads/default/original/3X/f/4/f401aec3c50eabcb51783d5371c86ef094f17da9.png" alt="Figure 1" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://ethresear.ch/t/more-meters-or-more-prices-one-vs-multi-dimensional-fee-mechanisms-on-ethereum/26244" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="eth_fee_fig2"><div class="media-frame"><img src="https://ethresear.ch/uploads/default/original/3X/3/1/319cae8375b569109f858f2ecf9a8252f1e2c29e.png" data-original-src="https://ethresear.ch/uploads/default/original/3X/3/1/319cae8375b569109f858f2ecf9a8252f1e2c29e.png" alt="Figure 2" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://ethresear.ch/t/more-meters-or-more-prices-one-vs-multi-dimensional-fee-mechanisms-on-ethereum/26244" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="eth_fee_fig3"><div class="media-frame"><img src="https://ethresear.ch/uploads/default/original/3X/3/1/318b00c186da6327d8d7d7479743079d2921196a.png" data-original-src="https://ethresear.ch/uploads/default/original/3X/3/1/318b00c186da6327d8d7d7479743079d2921196a.png" alt="fig3_near_limit_comparison" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://ethresear.ch/t/more-meters-or-more-prices-one-vs-multi-dimensional-fee-mechanisms-on-ethereum/26244" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div>
+<div class="prose" lang="en"><p><em>by Fei Wu. This work was partially conducted during my internship at the EF. I thank my mentor @misilva73 for helpful discussions and comments.</em></p>
+<h2><strong>Overview</strong></h2>
+<p>Previously, we have presented our analyses of the <a href="https://ethresear.ch/t/equilibrium-in-eip-7999-s-multidimensional-fee-market-the-execution-data-fee-floor-frontier/25868" rel="noopener noreferrer">equilibrium</a> and <a href="https://ethresear.ch/t/when-data-binds-execution-dynamic-simulation-of-eip-7999-s-multidimensional-fee-market/26018" rel="noopener noreferrer">dynamic simulation</a> of EIP-7999's multidimensional fee market, <a href="https://ethresear.ch/t/post-glamsterdam-one-dimensional-fee-market-and-comparison-with-eip-7999/26062" rel="noopener noreferrer">comparison with the post-Glamsterdam one-dimensional fee market</a>. We combine and extend these analyses into a paper: <strong><a href="https://arxiv.org/abs/2610.33455" rel="noopener noreferrer">More Meters or More Prices? One- vs. Multi-dimensional Fee Mechanisms on Ethereum</a></strong>.</p>
+<p>In the <a href="https://ethresear.ch/t/post-glamsterdam-one-dimensional-fee-market-and-comparison-with-eip-7999/26062" rel="noopener noreferrer">previous post</a>, we studied three one-dimensional benchmarks: the baseline (64-gas-per-byte floor and <code>CPSB = 1530</code>), floor-adjusted + <a href="https://eips.ethereum.org/EIPS/eip-8368" rel="noopener noreferrer">EIP-8368</a>, and floor-adjusted + <a href="https://eips.ethereum.org/EIPS/eip-8372" rel="noopener noreferrer">EIP-8372</a>. The strongest is <strong>floor-adjusted + EIP-8372</strong> given <a href="https://ethresear.ch/t/demand-model-with-elasticities-for-ethereum-state-data-and-execution-and-glamsterdam-fee-market-analysis/25644" rel="noopener noreferrer">the current resource demand</a>, which we call the <em>normalized benchmark</em> in the paper: the transaction floor price is adjusted to each propagation allocation, and EIP-8372 scales <code>CPSB</code> and the state gas limit by a common factor, so that regular gas and state gas reach their targets at the same base fee in equilibrium. It keeps the EIP-1559 target-to-limit ratio of 1/2 and the <a href="https://eips.ethereum.org/EIPS/eip-1559" rel="noopener noreferrer">EIP-1559</a> update rule. Under block-level demand variation, it delivers 151.9M–177.9M execution gas per block, but regular gas and normalized state gas both stay below their targets on average, giving 86.0–88.1 GiB/year of state growth against the 120 GiB/year target.</p>
+<p>In the paper, we push this benchmark further. We first raise its target-to-limit ratio up to 4/5 to see whether it delivers more execution. The EIP-1559 update rule then turns out to be a constraint, because it cannot lower the base fee to the few-wei level that a high target requires. We then replace it with the fake-exponential update of <a href="https://eips.ethereum.org/EIPS/eip-4844" rel="noopener noreferrer">EIP-4844</a>. Finally, we compare these one-dimensional variants with EIP-7999. Throughout, we measure congestion as the share of <strong>near-limit blocks</strong>, whose gas usage reaches at least 98% of a hard limit. The results presented in this post can be reproduced from <a href="https://github.com/M1kuW1ll/eip-7999-research/tree/main/reproducibility" rel="noopener noreferrer">this repository</a>.</p>
+<h3><strong>Main results</strong></h3>
+<ol>
+<li>
+<p><strong>A higher target ratio for floor-adjusted + EIP-8372 delivers more execution, but contracts state growth and raises congestion.</strong> From 1/2 to 4/5, execution rises from 151.9M–177.9M to 199.0M–215.0M, but state growth falls from 86.0–88.1 to 56.7–68.7 GiB/year, and near-limit blocks rise from about 4% to 13.2%–20.6%. Under the EIP-1559 update, the base fee stays at 18–27 wei on average, far above its 2.4–7.2 wei equilibrium, and state, the most price-responsive resource, contracts the most.</p>
+</li>
+<li>
+<p><strong>The EIP-1559 update rule prevents the fee from falling. The EIP-4844-style update allows lower fees and supports more execution/state, but brings more congestion.</strong> At a 4/5 ratio, execution rises to 214.8M–244.2M and state growth recovers to 94.0–96.0 GiB/year, but 38.8%–40.8% of blocks are near a limit, and regular gas and state gas both still stay below their targets.</p>
+</li>
+<li>
+<p><strong>EIP-7999 delivers more execution with state growth at its target, at similar or lower congestion.</strong> At a similarly low share of near-limit blocks, the conservative EIP-7999 configurations deliver 4%–34% more execution than floor-adjusted + EIP-8372 at 1/2. Against the EIP-4844-style variant, the maximum-throughput configurations deliver 19.5M–56.2M more execution with fewer near-limit blocks.</p>
+</li>
+</ol>
+<h2><strong>Raising the target-to-limit ratio</strong></h2>
+<p>We vary the target-to-limit ratio of floor-adjusted + EIP-8372 over 1/2, 3/5, 2/3, 3/4, and 4/5, keeping the gas limit and floor price of each propagation allocation. At each ratio, we recalibrate <code>CPSB</code> so that state usage at the target still corresponds to 120 GiB/year, and recompute the EIP-8372 scaling factor.</p>
+<p>[Figure 1]</p>
+<blockquote>
+<p>One-dimensional floor-adjusted + EIP-8372 benchmark under the EIP-1559 update, across target-to-limit ratios and propagation allocations. (a) Mean execution gas per block. (b) Annualized state growth, with the dashed line marking the 120 GiB/year target. Each point is the mean over the same 32 simulated demand paths.</p>
+</blockquote>
+<p>Execution rises with the ratio at every allocation, reaching 199.0M–215.0M at 4/5. But state growth moves further away from its target, falling to 56.7–68.7 GiB/year, and blocks become more congested: at 4/5, 13.2%–20.6% of blocks are near a limit, against about 4% at 1/2.</p>
+<p><strong>The EIP-1559 update cannot lower the fee to its new equilibrium.</strong> A higher target clears at a much lower fee: at 4/5, the base fee at which both branches reach their targets is only 2.4–7.2 wei. Under EIP-1559, a block below the target lowers the base fee by</p>
+<p>$$
+\left\lfloor \frac{b_t,(T_G-G_t)}{8T_G}\right\rfloor,
+$$</p>
+<p>where G_t is the gas usage of the larger branch. This decrease rounds to zero unless the block falls short of the target by at least 8/b_t of it. Once the fee is below 8 wei, no block can lower it, while every block above the target raises it by at least 1 wei. In the simulations, the fee never falls below 8 wei and averages 18.3–27.2 wei, about four to eight times its equilibrium value. In equilibrium, the 4/5 design would deliver 245M–280M of execution; in simulation, it delivers 199.0M–215.0M.</p>
+<p>A fee above equilibrium contracts every resource, but state the most, because state is the most price-responsive resource. A higher ratio also lowers the per-block state byte limit relative to the target, from twice the target at 1/2 to 1.25 times at 4/5, which clips bursts of state creation.</p>
+<h2><strong>Replacing the EIP-1559 update with an EIP-4844-style update</strong></h2>
+<p>To let the fee reach these low levels, we replace the EIP-1559 update of floor-adjusted + EIP-8372 at a 4/5 ratio with the persistent excess-gas counter and fake exponential of EIP-4844, keeping the configurations and demand paths fixed:</p>
+<p>$$
+x_{t+1}=\max\left(0,;x_t+G_t-T_G\right),
+\qquad
+b_t=\mathtt{fake_exponential}\left(1,;x_t,;8T_G\right).
+$$</p>
+<p>The counter keeps the small shortfalls that EIP-1559 rounds away, and the denominator 8T_G matches the response of EIP-1559. The table compares the two update rules at a 4/5 ratio. Each cell shows the EIP-1559 result followed by the EIP-4844-style result.</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th><strong>Propagation</strong></th>
+<th align="right"><strong>Execution (M)</strong></th>
+<th align="right"><strong>State growth (GiB/year)</strong></th>
+<th align="right"><strong>Near-limit blocks</strong></th>
+<th align="right"><strong>Mean base fee (wei)</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3.0s</td>
+<td align="right">206.4 → 225.9</td>
+<td align="right">64.6 → 96.0</td>
+<td align="right">17.7% → 40.8%</td>
+<td align="right">22.3 → 6.6</td>
+</tr>
+<tr>
+<td>3.5s</td>
+<td align="right">215.0 → 244.2</td>
+<td align="right">56.8 → 94.0</td>
+<td align="right">13.2% → 39.1%</td>
+<td align="right">18.3 → 3.6</td>
+</tr>
+<tr>
+<td>4.0s</td>
+<td align="right">214.1 → 243.6</td>
+<td align="right">56.7 → 94.0</td>
+<td align="right">13.4% → 38.8%</td>
+<td align="right">18.8 → 3.7</td>
+</tr>
+<tr>
+<td>4.5s</td>
+<td align="right">208.5 → 232.5</td>
+<td align="right">61.1 → 95.2</td>
+<td align="right">16.0% → 39.6%</td>
+<td align="right">21.5 → 5.4</td>
+</tr>
+<tr>
+<td>5.0s</td>
+<td align="right">199.0 → 214.8</td>
+<td align="right">68.7 → 95.6</td>
+<td align="right">20.6% → 39.9%</td>
+<td align="right">27.2 → 10.5</td>
+</tr>
+</tbody>
+</table>
+<p>With the EIP-4844-style update, the fee gets close to its equilibrium, so execution and state growth both recover. Two problems remain.</p>
+<p><strong>Congestion rises sharply.</strong> At a 4/5 ratio, the limit is only 1.25 times the target. With a lower fee, demand bursts reach the limit far more often, and 38.8%–40.8% of blocks are near a limit.</p>
+<p><strong>Both branches still stay below their targets.</strong> Regular gas averages 85.8%–87.1% of the target and normalized state gas 78.3%–80.0%. The fee follows the larger of the two branches in each block, which now averages 98.8%–100.0% of the target, so whenever one branch is above target, the other pays the higher fee as well. <strong>One fee can keep the larger branch on target, but not both.</strong> At a 1/2 ratio, the same change of update rule makes almost no difference (execution changes by less than 1.5M), because the fee there is 48–191 wei and rounding rarely matters.</p>
+<h2><strong>Comparison with EIP-7999</strong></h2>
+<p>We compare these one-dimensional variants with the two EIP-7999 selected configurations mentioned in the previous post, chosen from the tested execution and data targets at each propagation allocation:</p>
+<ul>
+<li><strong>Conservative</strong>: the highest-execution configuration inside the <a href="https://ethresear.ch/t/equilibrium-in-eip-7999-s-multidimensional-fee-market-the-execution-data-fee-floor-frontier/25868/2" rel="noopener noreferrer">execution–data frontier</a>, so that its equilibrium execution fee is above 1 wei, and whose share of near-limit blocks does not exceed the historical 4.73% (860,505 mainnet blocks from February to May 2026).</li>
+<li><strong>Maximum throughput</strong>: the configuration with the highest mean execution.</li>
+</ul>
+<blockquote>
+<p>The conservative rule is stricter than the "historically anchored" rule of the previous posts, which allowed 20% more near-limit blocks than the historical share, so some selections and numbers differ slightly.</p>
+</blockquote>
+<p>[Figure 2]</p>
+<blockquote>
+<p>Mean execution gas per block of the one-dimensional floor-adjusted + EIP-8372 benchmark ("One-dimensional EIP-8372") at target-to-limit ratios of 1/2 and 4/5, and of the two EIP-7999 selections, under the same 32 demand paths. Labels are in millions of gas per block.</p>
+</blockquote>
+<p>[Figure 3]</p>
+<blockquote>
+<p>Share of near-limit blocks, whose gas usage reaches at least 98% of a hard limit, for the same designs and the EIP-4844-style variant of floor-adjusted + EIP-8372 at 4/5. The dashed line marks the historical share of 4.73% on mainnet from February to May 2026.</p>
+</blockquote>
+<p>EIP-7999 keeps state growth at its 120 GiB/year target in every configuration, while the floor-adjusted + EIP-8372 variants deliver 56.7–96.0 GiB/year.</p>
+<p><strong>At similarly low congestion, EIP-7999 delivers 4%–34% more execution.</strong> The conservative configurations and floor-adjusted + EIP-8372 at 1/2 have 1.9%–4.4% and 4.0%–4.5% of blocks near a limit, both close to or below the historical share. The conservative configurations deliver 6.8M–56.0M more execution at every allocation.</p>
+<p><strong>A higher one-dimensional target ratio closes part of the execution gap only by raising congestion.</strong> At 4/5, floor-adjusted + EIP-8372 exceeds the conservative configurations by 32.8M at 3 seconds and 17.0M at 3.5 seconds and falls behind at longer allocations, but with 13.2%–20.6% of blocks near a limit, against 1.9%–4.4%.</p>
+<p><strong>At higher congestion, EIP-7999 still delivers more.</strong> The maximum-throughput configurations deliver 46.5M–72.0M more execution than floor-adjusted + EIP-8372 at 4/5, with somewhat more near-limit blocks (16.6%–32.1% against 13.2%–20.6%). Against the EIP-4844-style variant, they deliver 19.5M–56.2M more execution with fewer near-limit blocks (16.6%–32.1% against 38.8%–40.8%).</p>
+<p>More generally, we checked every one-dimensional run we simulated: the baseline and floor-adjusted + EIP-8368 benchmarks of the previous post, floor-adjusted + EIP-8372 at the five target ratios, and its EIP-4844-style variant, each at five propagation allocations. For each run, at least one tested EIP-7999 configuration at the same allocation, inside the execution–data frontier, delivers more execution, keeps state growth at its target, and has no larger share of blocks at a hard limit. The smallest such margin is 6.8M, for floor-adjusted + EIP-8372 at 1/2 and 3 seconds.</p>
+<h2><strong>Limitations</strong></h2>
+<p><strong>Demand calibration.</strong> The results are conditional on the demand model calibrated from the February and July 2025 gas-limit increases, and the tested execution targets extend well beyond observed demand. In the paper, we test robustness to elasticities estimated from 21-, 60-, and 75-day windows around these increases. Under every calibration, state still sets the shared base fee in the baseline and floor-adjusted + EIP-8368 benchmarks, and EIP-7999, with its targets reselected for each calibration, still delivers more execution than floor-adjusted + EIP-8372 and its EIP-4844-style variant. The size of the gain depends on the calibration and is generally smaller when execution demand is less price-responsive.</p>
+<p><strong>Tested variants only.</strong> We tested the one-dimensional variants described here, not every possible design. <em>The paper also shows that a one-time EIP-8372 calibration no longer aligns the two branches when demand differs from the calibration, and we did not test a mechanism that recalibrates the scaling factor as demand changes.</em></p>
+<h2><strong>Conclusion</strong></h2>
+<p>Raising the target ratio and improving the update rule both help the one-dimensional mechanism, but each brings a new cost. Under the EIP-1559 update, a higher target ratio cuts state growth and raises congestion. The EIP-4844-style update recovers state growth only by letting far more blocks reach the limit. Because the one single base fee follows the bottleneck resource, neither change keeps both near their targets. <strong>Under the calibrated demand model, EIP-7999 delivers more execution with state growth at its target, at similar or lower congestion, which supports moving from separate metering to separate pricing as Ethereum scales.</strong></p></div>
+</section>
+<footer class="source-box"><span>内容来自原作者；中文为新知编辑改写，非逐字翻译。</span><div><a href="https://ethresear.ch/t/more-meters-or-more-prices-one-vs-multi-dimensional-fee-mechanisms-on-ethereum/26244" target="_blank" rel="noopener noreferrer">打开原文 ↗</a><a href="https://arxiv.org/abs/2610.33455" target="_blank" rel="noopener noreferrer">相关链接 ↗</a></div></footer>
+</article></body></html>
