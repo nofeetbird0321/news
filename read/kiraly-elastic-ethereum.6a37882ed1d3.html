@@ -1,0 +1,527 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>弹性以太坊：Csaba Kiraly 主张按实测压力调节出块容量，借鉴 TCP 拥塞控制避免拥塞崩溃 · 新知</title><meta name="robots" content="noindex"></head><body><article class="article-reader" data-article-id="kiraly-elastic-ethereum">
+<a class="article-back" href="/">← 返回选刊</a>
+<header class="article-header"><p class="article-kicker">Csaba Kiraly / 文章</p><h1>弹性以太坊：Csaba Kiraly 主张按实测压力调节出块容量，借鉴 TCP 拥塞控制避免拥塞崩溃</h1><p class="article-dek">ethresear.ch 观点长文：以太坊容量今天是预先配置的开环系统；作者用两周主网传播数据说明固定余量的代价，提出以未最终化工作的规模和潜在损失作为控制信号，并列出信号共识、对手操纵等开放问题。</p><div class="article-meta"><time datetime="2026-11-12">本站收录 2026年11月12日 · 周四</time><span>原文发布 2026年11月11日 · 周三</span><span>原作者：Csaba Kiraly</span><span>中文改写：<a href="/about">新知</a></span><span>Web3 · 以太坊 · 共识 · 网络</span></div></header>
+<nav class="reader-tabs" aria-label="文章版本与来源"><div data-tabs><a href="#rewrite" id="tab-rewrite" data-view="rewrite">中文改写</a><a href="#original" id="tab-original" data-view="original">原文</a></div><a class="reader-source" href="https://ethresear.ch/t/elastic-ethereum/26236" target="_blank" rel="noopener noreferrer">原文链接 ↗</a><div class="reading-position" hidden><progress max="100" value="0" aria-label="当前版本阅读进度"></progress><span data-reading-percent aria-hidden="true">0%</span></div></nav>
+<section class="reader-panel" id="rewrite" data-reader-panel="rewrite" aria-label="中文改写"><h2 class="section-heading">中文改写</h2><div class="prose"><p>以太坊研究者 Csaba Kiraly 在 ethresear.ch 发表长文《Elastic Ethereum》。他在开头申明：这是一篇观点文章，反映的是对以太坊一种可能设计方向的愿景，并非一项具体设计；文章要论证的，是按弹性（elasticity）原则重新思考扩容（scaling）、可用性（availability）与最终性（finality）这三个概念。</p>
+<p><strong>TL;DR</strong></p>
+<ul>
+<li>以太坊的容量是预先配置好的：每个时隙一个区块，时隙时长固定，另有 gas 上限和区块大小上限。价格把需求匹配到这个容量上，安全余量替网络兜底。没有任何一条协议级规则会根据实测的资源压力调整容量限制。</li>
+<li>弹性首先关乎健壮性。有弹性的系统会测量自己能承载多少，跟不上时就少接活。没有这种反馈的系统，正是会陷入拥塞崩溃（congestion collapse）的那种系统，而以太坊的过载事故看上去就像这种崩溃。</li>
+<li>扩容随之而来。一个能主动回退的系统，才敢把运行点推到网络与节点实际承载力附近；靠固定余量的系统，等于每天都在为最坏的那天付费。TCP 是现成的例子：它的拥塞控制本来就是为了阻止崩溃而造的，也正因如此，同一个协议只做小改动就能同时跑在调制解调器和光纤上。</li>
+<li>作者把内存池（mempool）和未最终化的可用链看作两块“在制品”（work in flight）的灰色地带。第二块的规模、以及失去它要付出的代价，正是作者认为缺失的那个控制信号。</li>
+<li>主网数据显示了我们为此付出的余量：中位数区块在首次被看到后 0.38 秒到达 95% 的上报节点（第 99 百分位的区块为 0.70 秒）；链头（head）事件在首次被看到后 0.6 至 0.9 秒出现，取决于统计的是谁的节点。见证（attestation）截止时间在时隙开始后第 4 秒。首次被看到较晚的区块，在某些节点上仍会越过这条线。固定余量对大多数区块是闲置的，对另一些区块，则在区块还没出门之前就已耗尽。</li>
+<li>由此得到两个方向：控制设定点（在最终性之前超前构建多少、以多快构建），以及给构建降险（让丢掉一个区块的代价变小）。</li>
+</ul>
+<p>这篇长文在许多意义上并不新鲜，它是对作者此前一系列想法的总结与延续：</p>
+<ul>
+<li>2025 年 6 月 BerlInterop 期间与许多人分享过的一页旧笔记：<a href="https://notes.ethereum.org/PTl5PwX9SQiD1vygBW7QzA?view" rel="noopener noreferrer">Elastic Ethereum</a>；</li>
+<li>2025 年戛纳 Beam Day 演讲：<a href="https://hackmd.io/@willcorcoran/SyawFi9Sgl" rel="noopener noreferrer">Low-Latency P2P Networking for Beam Chain</a>（<a href="https://youtu.be/fGig7U9ld_c" rel="noopener noreferrer">视频</a>）；</li>
+<li>2026 年在戛纳的讨论；</li>
+<li>Rapidblocks 系列：<a href="https://ethresear.ch/t/rapidblocks-minimizing-merge-conflicts-in-the-block-building-pipeline/22590" rel="noopener noreferrer">第一部分，尽量减少出块流水线中的 “merge conflicts”</a>、<a href="https://ethresear.ch/t/rapidblocks-take-two-a-pipelined-consensus-for-independent-blocks/26152" rel="noopener noreferrer">第二部分，独立区块的流水化共识</a>、<a href="https://ethresear.ch/t/rapidblocks-with-split-proofs-execution-proofs-that-outlive-their-state/26157" rel="noopener noreferrer">第三部分，split proofs：比其状态更长寿的执行证明</a>；</li>
+<li>围绕 <a href="https://ethresear.ch/t/unblocking-faster-finality-with-decoupled-consensus/24527" rel="noopener noreferrer">decoupled consensus</a> 的 Cambridge'26 研讨会讨论；</li>
+<li>EthBoulder 演讲 <a href="https://www.youtube.com/watch?v=6sxz6kk2SVc" rel="noopener noreferrer">Scaling Ethereum's Networking Stack: Mempool, Blobs &amp; Congestion Control</a>，以及 ETHDenver 演讲 <a href="https://www.youtube.com/watch?v=U3k0b2qElog" rel="noopener noreferrer">Scaling &amp; P2P</a>。</li>
+</ul>
+<h2>开环与闭环：没人按实测压力调整容量</h2>
+<p>以太坊今天的容量是配置出来的。一个时隙 12 秒，每个时隙由一个提议者构建一个区块，受 gas 上限和大小上限约束。这些数字的变动只有两条路：运营商协调（gas limit 投票，变动可以在几小时内累加起来），或者升级（blob 参数分叉和硬分叉，需要数月）。而系统实际能承载多少，几秒钟内就会变化：需求在动，链路会被填满，节点会掉队。计划与现实之间的差额，现在由两处吸收。</p>
+<ul>
+<li><strong>交易被打包之前，价格在吸收。</strong> EIP-1559 把吞吐量锚定在一个目标上，让 base fee 浮动。</li>
+<li><strong>交易被打包之后，安全余量在吸收。</strong> 超时参数按糟糕的日子设定。日子好时容量闲置；日子非常糟时余量不够用：区块被重组、投票丢失，节点一旦掉队，最终性随之停滞。</li>
+</ul>
+<p>用控制论的话说，容量这一侧是开环的。没有任何协议级规则根据实测的资源压力调整容量限制，也没有任何机制在系统掉队时减少它承接的工作。一个弹性的以太坊，就是把环闭上。</p>
+<p>作者用以描述现状的图景里有两块灰色地带（图 1）。一笔交易先待在内存池里：已提交，尚未进入区块；然后它待在可用链（available chain）上：已进入区块，尚未最终化。如果说内存池是出块之前的灰色地带，可用链（今天是区块组成的树，在下文的部分设计里是一个 DAG）就是出块之后、最终化之前的灰色地带。两者装载的都是“在制品”：系统已经接下、尚未完成、仍然可能丢失的工作。</p>
+<section class="rewrite-source-media" aria-label="原文媒体"><div class="original-media">
+<figure class="media-figure" data-media-id="eth_elastic_fig1"><div class="media-frame"><img src="https://ethresear.ch/uploads/default/original/3X/e/7/e733069e4ce1d865da3b136fe80e0cca9d1fd1e1.png" data-original-src="https://ethresear.ch/uploads/default/original/3X/e/7/e733069e4ce1d865da3b136fe80e0cca9d1fd1e1.png" alt="Figure 1" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://ethresear.ch/t/elastic-ethereum/26236" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div></section>
+<p><em>图 1：一笔交易走向最终性的路径，以及两块“在制品”灰色地带。今天，价格逐块作用于需求，容量则是配置出来的。缺的，是一个根据两块灰色地带的状态来设定出块容量的回路。</em></p>
+<p>链在最终性之前允许跑到多靠前，本身就是一个选择。跑得越靠前，打包等待越少、闲置容量越少，代价是更多可能被丢弃的工作。作者所说的最终性，正是延迟与工作保全（work conservation，不把工作扔掉）之间的折中。这里的延迟按整条路径计：先在内存池里等（这是打包延迟的第一段），再等确认，再等最终性。</p>
+<h2>弹性的含义：能升、能降，而且要快</h2>
+<p>作者所说的弹性，指按需求的要求和供给的允许，把容量调上去、调下来，而且调得快。</p>
+<p>成功的网络协议都有弹性。TCP 是主要例子：同一个协议，经过重要但微小的改动，承载过从 2.4 kbps 调制解调器到 10 Gbps 光纤的流量。它做得到，是因为发送速率从来都不是协议参数。TCP 发送端靠测量找到速率：维护一个在途数据窗口，确认持续返回就扩大窗口，确认停止就砍掉窗口。降速与升速同为设计的一部分，而正是降速那一半让网络在坏日子里活下来；这一半也是先出现的。TCP 在 1988 年、网络已经崩溃之后，为了能继续活着才装上这个回路。速度随之而来：一个在网络满载时会回退的发送端，在网络空闲时才敢放心地要求更多。BitTorrent 是另一个例子：每个下载者同时也在上传，供给随需求一起增长。</p>
+<p>这些系统的共同点：</p>
+<ul>
+<li>容量是被发现的，不是被配置的；</li>
+<li>控制回路运行在与被控对象相同的时间尺度上（往返时间，而非治理周期）；</li>
+<li>同一套机制同时覆盖好日子和坏日子。</li>
+</ul>
+<h2>为什么重要：拥塞崩溃</h2>
+<p>读到这里，这像是一个效率论证：有闲置容量就用起来。作者的意思恰恰相反。弹性是为了活下来；利用闲置容量，是一个能回退的系统在此之后才被允许去做的事。</p>
+<p>拥塞崩溃指负载越多、有效工作越少的情形：系统很忙，产出很少。互联网在 1986 年 10 月撞上过它：两个相距 400 码的站点之间，吞吐量从 32 kbps 跌到 40 bps（<a href="https://ee.lbl.gov/papers/congavoid.pdf" rel="noopener noreferrer">Jacobson, 1988</a>）。Nagle 在差不多三年前就描述过这个机制（<a href="https://www.rfc-editor.org/rfc/rfc896" rel="noopener noreferrer">RFC 896</a>）：主机不断向一个已经满载的网络重传，而此前的闲置容量把这个问题掩盖住了。解决问题的是反馈：会测量的发送端，以及它们的回退。<a href="https://www.icir.org/floyd/papers/collapse.may99.pdf" rel="noopener noreferrer">Floyd and Fall (1999)</a> 后来列出了崩溃可能呈现的形态。每一种形态里，网络都把容量花在不会计入结果的工作上；对他们最担心的那种形态，他们点名的关键因素是 “the absence of end-to-end feedback”（缺少端到端反馈）。</p>
+<p>这看上去很容易避免：不去扩容，离极限远一点就行。作者看到三个问题。</p>
+<ul>
+<li><strong>我们确实在扩容。</strong> 更高的 gas limit、更多的 blob、更短的时隙：每一步都把运行点向极限推近。</li>
+<li><strong>我们不知道极限在哪里。</strong> 网络和节点在某一时刻能承载多少并不是常数，协议也不去测量它。</li>
+<li><strong>过载未必由用户需求增加引发。</strong> 以太坊的排班任务不因最终化停摆而停止：每个时隙出一个区块，每个 epoch 每个验证者投一次票。没有最终性时，做这些事的成本可以随距上一个最终化检查点的时间增长：要追踪的分支更多、无法剪枝的状态更多、旧投票需要旧状态。节点掉队或倒下，参与率下降，最终性离得更远。这个回路自己喂养自己，不需要需求增加就能启动。</li>
+</ul>
+<p>所以即使一条链从不提高容量，非最终性也可能把它带进拥塞崩溃。主网已经发生过两次相关的过载（<a href="https://prysm.offchainlabs.com/docs/resources/mainnet-postmortems/" rel="noopener noreferrer">Prysm 的事后分析</a>）。2023 年 5 月，携带旧目标的见证让两个客户端反复重新生成同一批旧状态，最终性两次被推迟，分别推迟了 4 个和 9 个 epoch。2025 年 12 月，就在 Fusaka 之后，针对旧状态处理见证耗尽了一个客户端的资源，参与率跌到约 75%，最终性保住了。两起都是共识处理环节的过载，而且都始于投票而非区块。它们并不能说明更小的区块或更长的时隙是否有帮助。所以需要控制的工作还包括投票、状态重新生成和同步。本文只跟进其中一个杠杆，即出块；它是否能缓解这些瓶颈，仍有待证明。</p>
+<p>Holesky 测试网在 2025 年初展示了长时间没有最终性会对节点做什么。它的起点是一个 bug，与负载无关：三个执行客户端因为一个配置错误的存款合约地址接受了一个无效区块，超级多数派为它投了票。接下来的部分才是这里真正要紧的。<a href="https://sigmaprime.io/blog/pectra-holesky-incident/" rel="noopener noreferrer">Sigma Prime 的报告</a>记录了这段漫长无最终性时期对 Lighthouse 意味着什么：数据库迁移和侧链剪枝停了下来，数据库从大约 20 GB 涨到超过 1 TB；各状态在内存里持有的 inactivity score 互不共享，每个 epoch 边界都要新增约 70 MB 的状态数据；节点在向试图同步的 peer 提供未最终化区块时耗尽了内存。（另见 <a href="https://archive.devcon.org/devcon-7/how-long-non-finality-could-kill-ethereum" rel="noopener noreferrer">How long non-finality could kill Ethereum</a>。）</p>
+<p>2023 年 5 月有一个值得记住的细节。Lighthouse 没有倒下，因为它丢弃了那些需要旧状态的见证。这就是负载卸载（load shedding），由一个客户端在本地完成，而且奏效了。Prysm 的报告也说明了为什么它不是普遍答案：丢弃之所以是更好的选择，是因为网络没有分叉；在网络已经分叉的情况下，那些见证恰恰是找出规范链所必需的。过载时丢什么、什么时候丢，是一个关于整个系统的问题。作者的论点是：这类控制应当进入协议的设计，而不只是留在每个客户端各自的启发式规则里。</p>
+<p>出路是弹性设计：一个在在制品堆积时少接活、在在制品清空后多接活的系统。</p>
+<h2>设计空间：需求、容量与浪费之间的三角</h2>
+<p>设计空间是需求、容量（系统提供的量）与系统效率（已完成的工作中有多少被浪费）三点之间的一个三角形。把容量朝需求推近，更多的工作就建立在可能落空的猜测上；拒绝浪费任何工作，容量就在我们等待确定答案时闲置。</p>
+<p>其底层的设计原则，是构建具备以下性质的系统：</p>
+<ul>
+<li><strong>流水化（pipelining）</strong> ：可以提高容量、缩短打包等待，但会增加潜在冲突，也就是被浪费的工作。</li>
+<li><strong>批处理（batching）</strong> ：增加延迟，但摊薄每一项所要付出的工作量，因此构成延迟与容量之间的权衡。</li>
+<li><strong>稳定控制（stable control）</strong> ：让流水化与批处理的系统保持平衡，按当前运行点的需要提供弹性容量。</li>
+<li><strong>无拥塞崩溃运行（congestion-collapse-free operation）</strong> ：以上一切的目的所在，过载时系统承接更少的工作，而不是更多。</li>
+</ul>
+<p>简洁证明（通常所说的 ZK 证明）在这里值得一提，它是完美的批处理工具。批处理靠摊销：每批只付一次的成本由批内所有东西分享，所以等得越久，摊到每一项上的工作量越少。递归证明把它推到极限：只要公开输入保持很小，无论覆盖多少内容（不同的消息、签名方案、计算），验证它的成本都大致相同。代价是证明本身：由一个节点做一次，供所有人使用。</p>
+<h2>内存池：出块之前的灰色地带</h2>
+<p>内存池的角色是把需求输送进系统。当前设计在内存池上用了两个控制回路：</p>
+<ul>
+<li>短期控制是价格动态。在较长的时间尺度上，平均区块吞吐量大致恒定，打包需求的调节由此留给价格，客户端则在各自的池里另行做限制和驱逐。需求上升时，区块会超过 gas target（limit 的一半），推动 base fee 上涨，进而压低需求。</li>
+<li>长期控制是 gas limit 投票（更长周期的则是 All Core Devs（ACD）流程和 gas limit 默认值）。blob 容量以类似方式移动，在仅调 blob 参数的分叉（<a href="https://eips.ethereum.org/EIPS/eip-7892" rel="noopener noreferrer">EIP-7892</a>）里以手工设定的步长调整。</li>
+</ul>
+<p>这个阶段缺的，是一条能在资源充裕时扩上去（内存池容量、出块容量）、在资源紧张时缩下来的交易流水线。</p>
+<p>相关想法：</p>
+<ul>
+<li>传统的内存池改进；</li>
+<li>递归聚合流水线。<a href="https://eips.ethereum.org/EIPS/eip-8288" rel="noopener noreferrer">EIP-8288</a> 把签名与证明聚合移进内存池，节点把见到的内容折叠成每 <code>AGGREGATION_INTERVAL</code>（草案中为 1 秒）一个递归证明。这个间隔就是一个批处理旋钮：用延迟换每笔交易更低的验证成本。在 EIP 里它是常数；在弹性设计里，它正是控制回路要调节的参数之一：过载时，更长的间隔意味着每笔交易的工作量更小，代价是延迟；</li>
+<li>分片设计。</li>
+</ul>
+<h2>可用链：出块与最终性之间的灰色地带</h2>
+<p>内存池容量解锁之后，下一个问题是链增长容量，换句话说就是可用链。链增长可以被看作构建容量、验证容量与分支风险三者之间的折中。</p>
+<p>当前设计运行在这样一种状态里：</p>
+<ul>
+<li>构建容量被视为瓶颈，尽管我们在执行客户端（如 Geth）上的改进取得了巨大进展；</li>
+<li>已构建区块与 payload 向验证者的分发被视为容量瓶颈，尽管这方面的改进步子更大（参见 <a href="https://ethresear.ch/t/seacast-fast-lean-sampled-broadcast-for-ethereum-with-an-executable-spec-and-a-formal-model/26167" rel="noopener noreferrer">SEACAST</a>）；</li>
+<li>ZK 证明是一个潜在的容量约束；</li>
+<li>数据可用性（DA）与区块验证是容量约束。</li>
+</ul>
+<p>我们一直在持续推高其中每一项的容量，而且这样做没有放弃无信任、包容性系统的核心原则，换句话说，没有要求数据中心级别的网络或者大量的 CPU 和内存。</p>
+<p>然而，这些改进没有一项本身就带来弹性。弹性关乎同时向上和向下的能力，最终让我们能设计出一个更稳定的系统，随之而来的是一个能力强得多的系统。</p>
+<p>作者认为能提供弹性的，是可伸缩的区块生成。我们目前在这件事上的模型是一维且有上限的：每个时隙，一个节点构建一个最大 gas 为 G、最大尺寸为 S 的区块。作者希望去到的位置是：区块生成可以爬坡，把内存池这块灰色地带里悬而未决的交易吸走。</p>
+<p>要理解出块另一侧的那块灰色地带，值得仔细看看可用链上的分叉究竟意味着什么。在当前设计下，可用链上出现分叉意味着：</p>
+<ul>
+<li><strong>出块容量被浪费。</strong> N 条分叉里只有一条能最终化，其余全是浪费的工作和浪费的 gas 吞吐量。费用机制并不能弥补这个损失：EIP-1559 只从父区块计算 base fee，所以一个错过或被孤立的时隙永远不会进入它的视野。后续区块可以消化积压，因为一个区块最多可以用到两倍 target，但机制会把这种追赶读成需求上升，从而抬高价格。这正是 <a href="https://eips.ethereum.org/EIPS/eip-4396" rel="noopener noreferrer">EIP-4396</a> 的动机，该提案目前停滞：一个错过的时隙，等于从链的吞吐量里拿走了一个区块的 gas target。</li>
+<li><strong>共识客户端的负载。</strong> 多条分叉给共识客户端带来越来越大的负载，资源占用上升，且没有明确的缓解手段。如果最终性被推迟，这个效应还会放大：正是上文那些灾难性故障的完美配方。值得一提的是，decoupled consensus 在其中一些问题上已取得巨大进展。</li>
+</ul>
+<h3>时隙该多长：两周主网数据的测量</h3>
+<p>分叉行为之下，是选择时隙时长（在后面的设计里是轮次时长）这个棘手问题。太短，可用链分叉；太长，容量缩水。</p>
+<p>为了看清这里要做的是什么选择，作者分析了来自 <a href="https://github.com/ethpandaops/xatu" rel="noopener noreferrer">Xatu</a>（ethPandaOps）的两周主网数据：2026 年 10 月 27 日至 11 月 9 日之间的 100,548 个区块，由 233 个装了测量组件的节点观测。图 2 画的就是这批数据的到达与传播曲线。</p>
+<section class="rewrite-source-media" aria-label="原文媒体"><div class="original-media">
+<figure class="media-figure" data-media-id="eth_elastic_fig2"><div class="media-frame"><img src="https://ethresear.ch/uploads/default/original/3X/8/f/8fea5f49a9888ec8744ca129d27f0dd7870d2480.png" data-original-src="https://ethresear.ch/uploads/default/original/3X/8/f/8fea5f49a9888ec8744ca129d27f0dd7870d2480.png" alt="Figure 2" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://ethresear.ch/t/elastic-ethereum/26236" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div></section>
+<p><em>图 2：左图，区块在一个时隙内首次被任一节点看到的时间、到达 50% 与 95% 节点的时间，以及 95% 节点将其报告为链头的时间；按 Xatu 标注为由 ethPandaOps 或公司运营的节点与个人贡献者的节点分别绘制。head 事件发生在 import 之后，此时节点已拿到它要采样的数据，且除 0.14% 的情况外都已验证 payload；每个客户端在自己认定的时点发出该事件。右图，已拥有该区块的节点占比随“自任何地方首次被看到以来的时间”的变化，按压缩后的区块大小分类，同一尺寸档的区块合并统计。</em></p>
+<p>右图可以直接读成一个超时选择问题。给传播留 0.4 秒，全部到达中的 95% 赶得上；给 0.7 秒，99% 赶得上。这两个数字把所有区块、所有节点合并统计。逐块看：中位数区块在 0.38 秒后到达其 95% 的节点，第 95 百分位的区块为 0.58 秒，第 99 百分位为 0.70 秒。head 事件更晚，而这里统计谁的节点很重要。对中位数区块，被 Xatu 标注为 ethPandaOps 或公司运营的节点中，95% 在首次目击后 0.58 秒将其报告为链头（第 99 百分位区块为 1.07 秒）；个人贡献者的节点则为 0.90 秒（1.84 秒）。head 事件跟随 import 和 fork choice 发生，每个客户端在自己认定的时点发出它，所以这不完全等于验证者准备好见证的时刻。见证截止时间在 4 秒。</p>
+<p>左图显示其余时间去哪儿了。中位数区块要到时隙开始后 1.57 秒才被任何节点看到。曲线在约 1.3、2.3 和 3 秒处的台阶看起来是发布时间，由提议者、relay 以及他们玩的 timing games 设定。这是作者的解读：仅凭首次目击，无法把这些台阶与 builder、relay 和提议者之间的正常处理区分开。余量的消耗因而不均匀：大多数区块会剩下一段没用完；而在尾部，余量一点不剩。第一组节点中有 1.7% 的区块、第二组中有 11.0% 的区块，其第 95 百分位 head 事件落在 4 秒或之后。这些是 head 事件，不是错过的见证；两组节点在客户端、硬件和地区上都不同，这个差异没有确定的原因。在全部节点中，出现这种过晚 head 事件的区块里，99% 首次被看到的时间在时隙开始后 2.35 秒或更晚。</p>
+<p>下面是固定超时无法回答的问题。</p>
+<p><strong>区块小或者大，会怎样？</strong> 大小有影响：50 到 60 KiB 的中位数区块在 0.34 秒内到达 95% 的节点，250 到 260 KiB 的要 0.61 秒。至于我们想去的地方，主网没有数据：这两周里超过 300 KiB 的区块只有 81 个。在 SEACAST 的评估里，用今天的 gossipsub，一个 1 MiB 的 payload 要 4.5 秒才能到达 500 个模拟家庭节点（50 Mbps 链路）中的 99%；用 SEACAST 只要 0.64 秒。分布也随协议而变。</p>
+<p><strong>网络状态糟糕的一小时，会怎样？</strong> 一天中的不同时段看不出可见差异。尾部确实会动（图 3 右）：逐小时看，中位数区块保持在 0.31 至 0.46 秒之间，而每小时第 99 百分位的区块（约 300 个里的第三慢）在 0.5 秒到 2.4 秒之间。</p>
+<p><strong>如果一条海底光缆部分故障，造成改道、延迟增加、洲际容量下降，会怎样？</strong> 这两周的数据回答不了。它们能说明的是，节点在哪里本来就有影响（图 3 左）：欧洲节点在 0.30 秒后已收到 95% 的到达，大洋洲节点要 0.58 秒。大多数观测（81%）来自欧洲和北美，首次目击很可能也多发生在那里；距离、连接质量和节点类型都参与了这个差异。当路径变长时，分布会移动，而超时不会；在这两周里，分布几乎没有移动。这些数据不能证明自适应会比一个更好的固定截止时间更好：测量之所以有理，依据的是那些与这两周不一样的日子，以及我们还没试过的容量。</p>
+<section class="rewrite-source-media" aria-label="原文媒体"><div class="original-media">
+<figure class="media-figure" data-media-id="eth_elastic_fig3"><div class="media-frame"><img src="https://ethresear.ch/uploads/default/original/3X/7/f/7ff0dff9f8f4824bc63b73eb4a611006455d2f1e.png" data-original-src="https://ethresear.ch/uploads/default/original/3X/7/f/7ff0dff9f8f4824bc63b73eb4a611006455d2f1e.png" alt="Figure 3" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://ethresear.ch/t/elastic-ethereum/26236" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div></section>
+<p><em>图 3：左图，按节点所在大洲统计的已拥有区块的节点占比。右图，逐小时统计到达 95% 节点所需的时间，分别为中位数区块和每小时第 99 百分位的区块。</em></p>
+<p>一些注意事项。这些节点是向 Xatu 上报的节点。在大约 146 个上报了区块的节点中，约 86 个是个人贡献者的节点，约 60 个由 ethPandaOps 或公司运营；它们并不按主网的客户端或地区比例分布。这里的“节点占比”指上报了该区块的节点中的占比。观测太少的区块被剔除（按组统计 head 数据时，100,548 个中有 604 个被剔除），这最多能让那些占比移动 0.6 个百分点。“首次被看到”是任一节点的首次目击，不是提议者发布的那一刻。时间戳在客户端事件到达 Xatu sentry 时记录，因此包含了该客户端如何定义和投递这个事件；这会让到达时间移动几十毫秒。区块大小指 beacon 区块的大小：blob 数据另行传输，尽管节点只有在拿到 blob 数据后才会把区块当作链头。最后，以上全部处于 ePBS 之前：一旦 payload 单独传输，这些截止时间都会改变。</p>
+<p>现在的系统和当前的共识设计，无法对以上任何一件事做出反应。它只能过度配置，把超时设得很高。对最终性来说，这付出的是时间而非安全性：finality gadget 的安全性不依赖延迟上界，只要求出错的质押少于三分之一。（长时间分区是例外，因为 inactivity leak 那时可以让<a href="https://ethresear.ch/t/inactivity-leak-unveiled/19774" rel="noopener noreferrer">双方各自最终化</a>。）对可用链来说，付出的比时间更多：它对重组的抵抗力依赖区块和投票在超时内到达，所以在这里，超时直接以重组概率换取吞吐量。无论哪种情形，系统都始终运行在某个次优的容量点上：要么太慢，要么太快。</p>
+<p>作者主张的设计方向，试图从两件事入手克服这些缺陷：</p>
+<ul>
+<li>控制设定点：可用链的确认延迟，以及在其之前流水化构建的量；</li>
+<li>降低构建冲突的概率，以及仍然发生的重组的代价。</li>
+</ul>
+<h2>控制设定点：同步、异步模型与 p2p 的现实</h2>
+<ul>
+<li>传统 p2p 系统设计的一条基本规则：不存在可靠的 peer。peer 随时可能掉线、不应答，或出现临时故障。</li>
+<li>类似地，网络上发起的任何动作都没有延迟保证，唯一有保证的是由超时守护的那些承诺（要么交互在 t &lt; T 内推进，要么在 T 时刻采取行动）。</li>
+<li>然而，共识理论常常把这个问题看作同步（有延迟保证）与异步（没有保证）两种状态，中间是部分同步（有保证，但只从某个未知的时间点起）。需要说明：从为共识设计及其保证建模的角度看，这完全合理。只是把它映射到一个持续变化的世界级 p2p 系统的现实上，并不高效。</li>
+<li>作者在这里主张的是对这条规则的随机化解读：T 的选择决定消息传递成功的（往往未知的）概率。</li>
+<li>这样看，超时 T 就是一个要接受的折中：设得低，冒着更多错过截止时间的风险；设得高，等待更久？T 并非分析所假设的延迟上界 Δ。实测延迟可以为 T 提供依据，并告诉我们会以多大频率越过它；但一个保证仍然需要网络模型和敌手模型。</li>
+</ul>
+<p>TCP 从 1988 年起就是这么工作的。它的重传超时并非常数，由实测往返时间算出：平滑均值加四倍平均偏差，建议下限为一秒，每次超时就翻倍（<a href="https://www.rfc-editor.org/rfc/rfc6298" rel="noopener noreferrer">RFC 6298</a>）。超时跟着实测延迟走，并留出反映波动幅度的余量。图 2 画的正是以太坊区块的延迟分布。我们测得到它，协议却没有用它。</p>
+<p>共识研究者会问：responsiveness 不是已经解决这个问题了吗？<a href="https://arxiv.org/abs/1803.05069" rel="noopener noreferrer">HotStuff</a> 一族的协议是 responsive 的：一旦网络稳定且 leader 正确，它们按实际网络延迟而非上界 Δ 的速度提交。许多基于 DAG 的 BFT 协议也随 quorum 的形成尽快扩展自己的 DAG。这两类协议能这样做，是因为 2/3 quorum 在它们的关键路径上。以太坊的可用链故意放弃了这一点，以便在最终性 quorum 之下继续前进，代价是它必须自带关于参与度和网络的假设；这样的链需要一个超时。decoupled consensus 保持了同样的分工：关键路径上是由超时驱动的可用链，最终性在其旁边。要不要超时已不是问题，问题是怎么选它。</p>
+<h3>自适应不是新想法，问题是怎么接到未最终化工作上</h3>
+<p>根据条件调整参数在共识系统里早有先例。BFT 协议在一轮失败后会拉长超时时间，<a href="https://arxiv.org/abs/1912.10367" rel="noopener noreferrer">Dispel</a> 会在资源允许时启动新的共识实例。Monero 和 Bitcoin Cash 让区块大小上限跟随实际使用量变化，Avalanche 允许验证者调整 gas 目标和最小区块时间。以太坊自己也在用有界步长的投票方式移动 gas limit，<a href="https://eips.ethereum.org/EIPS/eip-8075" rel="noopener noreferrer">EIP-8075</a> 则提出了一种跟随状态增长变化的状态成本。Kiraly 提出的问题是：在一条必须保持可用性的链上，如何把这类自适应机制绑定到尚未最终化的工作量上。</p>
+<h3>控制信号应该从哪里来</h3>
+<p>假设我们能把时隙（或轮次）时长做到高粒度可调，那应该根据什么来设定它？Kiraly 认为主要信号有三类：</p>
+<ul>
+<li>来自内存池的需求压力（单看内存池大小衡量得很差：灌水成本很低，而且对私有订单流完全不可见）；</li>
+<li>来自网络状况的浪费工作风险；</li>
+<li>最重要的一点，可能已经可用但尚未最终化的工作量。</li>
+</ul>
+<p><strong>在 Kiraly 的心智模型里，区块构建与最终化之间那块灰色地带的规模和潜在成本（被浪费的工作），是决定区块构建容量的最佳控制信号。</strong> 在前文的图 1 中，这就是那条虚线回路。</p>
+<p>理由是这份积压会在系统落后时自然增长：构建让它变大，最终化或被丢弃让它变小，而最终化一旦停滞就堵住了第一个出口。gas、数据字节数、证明工作量、暂时无法剪枝的状态，各自度量的是不同类型的压力。即使没有重组，持有这份积压本身就要消耗资源；在此之上预期还要损失多少，取决于重组发生的概率，以及它会回滚掉什么：计算，以及用户已经依赖的确认。</p>
+<h3>积压是压力计，不是刹车</h3>
+<p>Kiraly 明确表示，他会把这份积压当作压低新接入工作量的压力信号，而不是当成一个“装满就停链”的窗口。当超过三分之一的质押离线时，可用链仍在继续运行，只是最终化停了；<strong>如果给未最终化工作量设硬上限，可用链也会一起停下，等于给了任何能拖延最终化的一方一个踩住所有人的刹车。</strong></p>
+<p>所以被接纳的工作量保有一个下限，而在长时间故障中，未最终化的历史就没有上界。它的哪些成本可以被限定住，以及如何区分“真的过载”和“只是质押者缺席”，都是开放问题。</p>
+<h3>TCP 类比，逐项对应</h3>
+<p>Kiraly 把整套设计类比成 TCP 的拥塞控制，对应关系如下：</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>TCP</th>
+<th>以太坊</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>发送缓冲区，对应用层形成背压</td>
+<td>内存池，以价格作为背压</td>
+</tr>
+<tr>
+<td>在途报文段（已发送，尚未确认）</td>
+<td>可用链中尚未最终化的区块</td>
+</tr>
+<tr>
+<td>累积确认（cumulative ACK）</td>
+<td>最终化</td>
+</tr>
+<tr>
+<td>选择性确认（selective ACK）</td>
+<td>对一个窗口内各个区块的投票</td>
+</tr>
+<tr>
+<td>重传超时，由实测往返时间得出</td>
+<td>见证截止时间和时隙时长，今天是常数</td>
+</tr>
+<tr>
+<td>拥塞窗口</td>
+<td>对新工作量的限制，随未最终化工作增长而收紧；目前缺失</td>
+</tr>
+<tr>
+<td>丢包，然后重传</td>
+<td>区块被孤立，然后其中仍然有效的交易可以再次被包含</td>
+</tr>
+</tbody>
+</table>
+<h3>类比在哪里失效：以太坊比 TCP 更难的五个地方</h3>
+<p>这张表同时也标出了类比停止的位置。Kiraly 逐条列出了让这个问题比 TCP 更难的原因：</p>
+<ul>
+<li><strong>信号必须达成一致。</strong> TCP 发送方独自测量、独自行动。而时隙时长或区块大小必须对每个诚实节点都相同，所以控制器的输入必须是每个节点都能在自己构建的链上计算出完全相同结果的东西。已有先例：base fee 从父区块计算得出，inactivity leak 从距最近已最终化检查点的距离得出。这里的候选信号包括同样的距离、分支最近 k 个时隙中空时隙的占比，以及每个时隙的投票参与率。（链本身无法区分一个时隙是被孤立还是被错过，除非区块记录自己孤立掉了什么，就像工作量证明时代的以太坊用 ommers 做的那样。）</li>
+<li><strong>最需要控制信号的时候，已最终化链反而是沉默的。</strong> 公共时隙时长的自然来源是已最终化的链（下文会展开）。但当最终化延迟时，它不会给出任何新信息。规则需要为这种情况准备一个默认值。像 TCP 发送方在确认停止到来时那样减少新接入的工作量，是一个候选方案，前提是它能缓解过载的资源，并为提议、投票和同步留出空间。改变时隙时长也可能拖慢恢复，除非职责和惩罚机制随之同步重新标定。</li>
+<li><strong>回路延迟。</strong> 任何达成一致的信号至少滞后一个确认。这限制了控制器能做出多强的反应：基于过期的测量数据行动可能过冲，也可能振荡。</li>
+<li><strong>信号有一部分掌握在对手手里。</strong> 扣住区块或投票会让网络显得很慢，压低所有人的容量。延迟发布也一样，只是作为 timing 博弈的副作用存在。TCP 遇到过这件事的镜像版本：接收方谎报收到的内容，好让发送方跑得更快（Savage et al., 1999）。当时的修复办法是让信号难以伪造：确认必须能证明收讫，且窗口随新确认的字节数增长，而不是随确认的数量增长。对以太坊来说，这意味着信号要有链上证据背书，并且要限制它能被推动的幅度，不仅限于单个参与者单步推动，还要覆盖多个参与者在多步中的联合推动，即每次容量恢复时都可以再推一点。接纳工作量的下限是这条防线的最后一道。AIMD 的不对称性在这里帮不上忙：一条能快速退避的规则，也能快速服从任何伪造拥塞的人。</li>
+<li><strong>测量网络，而不是测量提议者。</strong> 前文的图 2 提示，相对于时隙开始时刻的到达时间，更多反映的是区块何时被发布，而不是网络本身。控制器需要的是从发布时刻起算的传播时间本身；如何把它转化成一个达成一致的信号，是这个方向的开放问题之一。</li>
+</ul>
+<h2>如何把区块构建容量调上去、调下来</h2>
+<p>粗略近似下，容量等于区块大小除以区块之间的时间。流水线（pipelining）可以让这个时间短于一个区块完成结算所需的时间（即被投票纳入或剔除所需的时间），办法是同时保持多个构建（build）开启；此时容量等于流水线中的构建数量乘以区块大小，再除以结算时间。如果还有彼此独立的通道（lane），这个数字还要再乘一次。</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>旋钮</th>
+<th>代价</th>
+<th>如何调节，或提议如何调节</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>区块大小</td>
+<td>传播、验证与构建延迟，因而有分叉风险；还有公平性与包容性</td>
+<td>gas 上限投票；blob 参数分叉</td>
+</tr>
+<tr>
+<td>时隙时长</td>
+<td>每一步可用的时间变少，因而有分叉风险；所有节点必须就它达成一致</td>
+<td>硬分叉（<a href="https://eips.ethereum.org/EIPS/eip-7782" rel="noopener noreferrer">EIP-7782</a>、<a href="https://eips.ethereum.org/EIPS/eip-8198" rel="noopener noreferrer">EIP-8198</a>）</td>
+</tr>
+<tr>
+<td>并行区块</td>
+<td>并行部分之间的协调</td>
+<td>执行分片提案</td>
+</tr>
+<tr>
+<td>并行流水线</td>
+<td>同时构建的区块之间的冲突</td>
+<td>Rapidblocks</td>
+</tr>
+</tbody>
+</table>
+<p><strong>区块大小。</strong> 最直接的办法是控制区块容量。区块容量通过三条路径影响分叉概率：网络传播（区块大小带来的延迟）、验证（区块大小带来的验证延迟），以及区块构建延迟。正如前文提到的，让这三者各自更高效的工作正在进行，但没有一项能改变这个事实：** 区块越大，可用链被分叉的概率就越大**。控制回路是可以建立的，不过值得指出它对公平性（澳大利亚的验证者还有机会吗？）和包容性（非职业的验证者运营者还有机会吗？）的潜在影响。Kiraly 希望这种控制能把地理上分散的家庭运营者留在网络里：掉出网络的节点必须被当作一次警告；掉线不能被当作上调容量的许可。这些问题中与激励相关的部分，他留待以后讨论。</p>
+<p><strong>时隙时长。</strong> 一种听起来可能很简单（纸面上简单，实践中不然）的办法是缩短时隙时长。</p>
+<ul>
+<li>时间更短，区块更多，容量更大。当然，前提是假设区块大小保持不变、未按比例缩小。</li>
+<li>另一个版本：时间更短，区块更多，但区块大小按比例缩小。容量没有直接增加，但最终性窗口可以缩小，潜在会被浪费的工作量也因此可以减少。</li>
+</ul>
+<p>显然，一旦时间假设可以变化，所有节点必须在同一套时间假设下运行，这一点是根本性的。因此，时隙时长理想上应当从已最终化的链推导出来，而这会带来不小的控制论难题（即上一节谈到的共识信号与回路延迟）。它还需要一条激活规则，保证所有人使用同一份时隙时刻表，既包括跨越重组的情形，也包括那些较晚才得知某个已最终化 checkpoint 的节点。</p>
+<p><strong>并行区块。</strong> 另一种做法是并行构建多个区块，也就是那个饱受争议的执行分片（execution sharding）设计。Kiraly 不打算展开太多；他认为这方面已有相当多的现成材料。</p>
+<p><strong>并行流水线。</strong> 最后，在 Kiraly 看来最优雅的设计，是名字听起来很复杂的并行流水线（parallel pipelining）方案。它在并行维度上扩展，但不试图让各条并行流对齐。恰恰相反，它让它们错开，从而只需极少的信息传播与协调。这样就剩下三个可调参数：</p>
+<ul>
+<li>区块的大小；</li>
+<li>单个已构建区块完成结算的时间窗口；</li>
+<li>同时并行进行的流水线构建数量。</li>
+</ul>
+<p>在 <a href="https://ethresear.ch/t/rapidblocks-take-two-a-pipelined-consensus-for-independent-blocks/26152" rel="noopener noreferrer">Rapidblocks, take two</a> 里，这三者分别体现为：区块大小；一个区块被投票的 L 个时隙的窗口（及其投票节奏 m）；以及同时并发的时隙数。快速确认正常工作时，并发时隙数为 ⌈(ℓ + 2Δ)/τ⌉，其中 τ 是时隙时长，ℓ 是投票延迟，Δ 是延迟上界；确认停滞时，并发数最多可达整个窗口。投票节奏用来吸收慢网络，投票慢时取 m = 2。在该提案中它是预先选定的常数。Kiraly 指出，这正是弹性设计会根据测量来设定的那类参数，而这样做意味着要重新检查该提案的时序假设。</p>
+<p>Kiraly 在这里再次强调，他手上没有、也不主张某个具体设计，只是勾勒他对弹性以太坊可能走向的设想。</p>
+<h2>给出块降险：从 TCP 的选择性确认借思路</h2>
+<p>前面几节讨论如何给出块与最终性之间的灰色地带降险时，重点基本都在时间这一面：更长的时隙和超时。给流水化构建降险的另一条路，是降低重组的代价。用网络领域的类比来说，这就是 SACK（Selective ACKnowledgement，选择性确认），1996 年起成为 TCP 的一部分（<a href="https://www.rfc-editor.org/rfc/rfc2018" rel="noopener noreferrer">RFC 2018</a>）。这个类比（Kiraly 在 Cannes'25 的演讲里也用过）很简单：不等下一个区块被确认，而是把 W 个区块流水化（即窗口），并对一个滚动窗口做确认。SACK 额外做的事，是让接收方说明窗口里哪些部分已经到达，于是只需重发缺失的部分。这在 TCP 里行得通，是因为数据包虽然有序，却没有链式依赖，一个包可以稍后重发、再插回序列中。对链式数据结构，这就没那么好用了。</p>
+<p>不过，Kiraly 在 Rapidblocks 里已经概述过解决办法。在那里，一个区块不依赖它的直接前驱，所以它可以被投票剔除而无需重组；每张投票都为窗口内每个开放时隙带一个条目，除了名字之外，这就是选择性确认。这个设计尚未定稿。要让它可行，很可能需要区分快速的并行路径和一条慢速的顺序路径，否则存在审查风险：一笔与并发区块冲突的交易，要等到一个能容纳它的时隙；如果没有一条保证收录它的顺序路径，这个等待就没有上限，而故意制造交易冲突的人就能一直把它挡在外面。Rapidblocks 工作在（子）区块层面，其他类似设计也可以在交易粒度上处理冲突关系。</p>
+<p>这听起来可能很复杂，但要抓住的关键观察是：按计划进行的后量子（PQ）迁移（基于哈希的签名，用证明来聚合）会把见证聚合带入一种新的状态，不再只是对单个见证做签名聚合。聚合由此走上 ZKP 的路径，在那里聚合就是计算：一种可编程的变换，可以作用于更复杂的数据结构，比如投票窗口。</p>
+<h2>执行证明的作用</h2>
+<p>执行证明可以用检查一个简洁证明来代替重新执行。数据交付、可用性检查以及其余的共识检查仍然要花时间，而工作则转移到证明者身上：只做一次，不再由每个节点各做一遍。增加证明者，只在证明工作可以拆分时才有帮助。</p>
+<p>有些区块的证明成本远高于其 gas 所显示的水平：在主网上发现的<a href="https://ethresear.ch/t/the-hunt-tracking-organic-prover-killer-blocks-on-ethereum/22332" rel="noopener noreferrer">天然“证明者杀手”区块</a>，所需时间通常是 gas 相近的其他区块的两到四倍。证明积压是又一个候选信号。</p>
+<p>证明也会增加一个被丢弃区块的代价。在 <a href="https://ethresear.ch/t/rapidblocks-with-split-proofs-execution-proofs-that-outlive-their-state/26157" rel="noopener noreferrer">Rapidblocks with split proofs</a> 中，执行证明不指明状态根，因此对相同的交易和上下文，只要状态变化没有碰到该区块读取的内容，证明就一直有效；而把它与状态根绑定的那些证明可能需要重做。投票也可以在区块之后几轮才要求提供证明：这又是一个在延迟与健壮性之间的选择。</p>
+<h2>这是不是仍然是一种受限的视角？</h2>
+<p>Kiraly 自问自答：上面勾勒的弹性以太坊愿景，仍然扎根于一种传统视角，把出块看作系统中处于中心、受激励的那个点，左边是混乱的内存池环境，右边是纯粹的共识理论。一定要这样吗？能不能把从交易产生到最终性的整条流水线作为一个整体来处理？</p>
+<p>他认为，上面的流水化设计、内存池递归聚合的最新变化，以及 decoupled consensus 设计的最新演进，都在向这样一种愿景靠拢。特别是，随着递归签名聚合变成内存池的工作（见 <a href="https://eips.ethereum.org/EIPS/eip-8288" rel="noopener noreferrer">EIP-8288</a>，另见 <a href="https://notes.ethereum.org/TiEH-78LQ5WCr56IEVh3Bg" rel="noopener noreferrer">Paying the mempool workers</a>），以及执行处理有可能与状态依赖解耦（见 <a href="https://ethresear.ch/t/rapidblocks-with-split-proofs-execution-proofs-that-outlive-their-state/26157" rel="noopener noreferrer">Rapidblocks with split proofs</a>），可以设想一条粒度细得多的构建流水线：一部分交易走高吞吐的分片流水线，另一些复杂交易走内存池内的执行证明路径，等等。</p>
+<p>Kiraly 的判断是：设计空间非常大，但进展也非常快。</p>
+<h2>开放问题</h2>
+<ul>
+<li><strong>用哪个信号？</strong> 它必须是共识一致的、难以操纵的，并且在最终性缺席时依然存在。</li>
+<li><strong>除了提议者的时间，如何在协议内测量网络？</strong></li>
+<li><strong>控制律是什么？</strong> 如果反馈是诚实的，加性增、乘性减（AIMD）是显而易见的起点。在一条链上，它的增益和延迟是多少，它是否稳定？</li>
+<li><strong>谁会被落下？</strong> 按百分位设定的截止时间，可能会一再把同一批节点甩在后面；而固定截止时间已经在不均等地对待节点（图 2）。控制器应该保护哪些硬件、连接条件和地区？</li>
+<li><strong>激励会对回路造成什么影响？</strong> 延迟发布今天已经在蚕食余量。在闭环里，它还可能把容量压下去。</li>
+<li><strong>费用，以及一切以时隙计数的东西会怎样？</strong> 如果容量会变，EIP-1559 的 target 跟随什么？如果时隙时长会变，按时隙或 epoch 计算的发行、惩罚和职责就需要一条规则，就像 <a href="https://eips.ethereum.org/EIPS/eip-8198" rel="noopener noreferrer">EIP-8198</a> 为计划中的时隙时长变更给出的那条规则。</li>
+<li><strong>状态增长怎么办？</strong> 最终性不会让它退场，新节点追赶同步的成本也不会因此消失。</li>
+</ul>
+</div></section>
+<section class="reader-panel" id="original" data-reader-panel="original" aria-label="原文">
+<h2 class="section-heading">原文</h2><p class="completeness-note">原帖三张图已移到上方媒体区，正文中以 [Figure N] 标出原位置，图注保留在原位；仅收录主楼，未收录回帖。</p><h3 class="original-title">Elastic Ethereum</h3>
+<div class="original-media">
+<figure class="media-figure" data-media-id="eth_elastic_fig1"><div class="media-frame"><img src="https://ethresear.ch/uploads/default/original/3X/e/7/e733069e4ce1d865da3b136fe80e0cca9d1fd1e1.png" data-original-src="https://ethresear.ch/uploads/default/original/3X/e/7/e733069e4ce1d865da3b136fe80e0cca9d1fd1e1.png" alt="Figure 1" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://ethresear.ch/t/elastic-ethereum/26236" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="eth_elastic_fig2"><div class="media-frame"><img src="https://ethresear.ch/uploads/default/original/3X/8/f/8fea5f49a9888ec8744ca129d27f0dd7870d2480.png" data-original-src="https://ethresear.ch/uploads/default/original/3X/8/f/8fea5f49a9888ec8744ca129d27f0dd7870d2480.png" alt="Figure 2" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://ethresear.ch/t/elastic-ethereum/26236" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+<figure class="media-figure" data-media-id="eth_elastic_fig3"><div class="media-frame"><img src="https://ethresear.ch/uploads/default/original/3X/7/f/7ff0dff9f8f4824bc63b73eb4a611006455d2f1e.png" data-original-src="https://ethresear.ch/uploads/default/original/3X/7/f/7ff0dff9f8f4824bc63b73eb4a611006455d2f1e.png" alt="Figure 3" loading="lazy" decoding="async" referrerpolicy="no-referrer"><p class="media-error" role="status" hidden>媒体未能载入，请通过下方原文链接查看。</p></div><figcaption><span>原帖图片</span><a href="https://ethresear.ch/t/elastic-ethereum/26236" target="_blank" rel="noopener noreferrer">无法显示？去原文查看 ↗</a></figcaption></figure>
+</div>
+<div class="prose" lang="en"><p><em>The following is an opinion post reflecting my vision for a possible design direction for Ethereum, not a concrete design. What I argue for is to rethink the notions of scaling, availability, and finality according to the principles of elasticity.</em></p>
+<p><strong>TL;DR</strong></p>
+<ul>
+<li>Ethereum’s capacity is configured in advance: one block per slot, a fixed slot time, a gas limit and a size limit. Price matches demand to it, and safety margins cover for the network. No protocol-wide rule adapts capacity limits to measured resource pressure.</li>
+<li>Elasticity is first of all about robustness. An elastic system measures what it can carry and takes on less when it is falling behind. A system without that feedback is the kind that goes into congestion collapse, and Ethereum’s overload incidents look like it.</li>
+<li>Scaling comes with it. A system that can back off can afford to run close to what the network and the nodes can carry, where a fixed margin has to pay for the worst day every day. TCP is the working example: its congestion control was built to stop collapses, and it is also much of why the same protocol, with small changes, runs on modems and on fibre.</li>
+<li>I look at the mempool and the unfinalized available chain as two grey areas of work in flight. The second one, its size and what it would cost to lose, is the control signal I think we are missing.</li>
+<li>Mainnet data shows the margin we pay for. The median block reaches 95% of the reporting nodes 0.38 s after it is first seen (0.70 s for the 99th-percentile block). Head events follow 0.6 to 0.9 s after first sighting, depending on whose nodes are counted. The attestation deadline is 4 s into the slot. Blocks that are first seen late still cross it at some nodes. A fixed margin is idle for most blocks, and for some it is spent before the block is out.</li>
+<li>Two directions follow: control the set point (how much we build ahead of finality, and how fast), and de-risk building (make a lost block cost less).</li>
+</ul>
+<p>The writeup is in many senses not new. It is a summary and continuation of ideas I’ve shared in:</p>
+<ul>
+<li>an old notes page shared with many during BerlInterop (June 2025): <a href="https://notes.ethereum.org/PTl5PwX9SQiD1vygBW7QzA?view" rel="noopener noreferrer">Elastic Ethereum</a>;</li>
+<li>my Cannes’25 presentation at Beam Day: <a href="https://hackmd.io/@willcorcoran/SyawFi9Sgl" rel="noopener noreferrer">Low-Latency P2P Networking for Beam Chain</a> (<a href="https://youtu.be/fGig7U9ld_c" rel="noopener noreferrer">video</a>);</li>
+<li>discussions in Cannes in 2026;</li>
+<li>Rapidblocks: <a href="https://ethresear.ch/t/rapidblocks-minimizing-merge-conflicts-in-the-block-building-pipeline/22590" rel="noopener noreferrer">part 1 (minimizing “merge conflicts” in the block building pipeline)</a>, <a href="https://ethresear.ch/t/rapidblocks-take-two-a-pipelined-consensus-for-independent-blocks/26152" rel="noopener noreferrer">part 2 (a pipelined consensus for independent blocks)</a> and <a href="https://ethresear.ch/t/rapidblocks-with-split-proofs-execution-proofs-that-outlive-their-state/26157" rel="noopener noreferrer">part 3 (split proofs: execution proofs that outlive their state)</a>;</li>
+<li>the Cambridge’26 workshop discussions around <a href="https://ethresear.ch/t/unblocking-faster-finality-with-decoupled-consensus/24527" rel="noopener noreferrer">decoupled consensus</a>;</li>
+<li>my EthBoulder presentation, <a href="https://www.youtube.com/watch?v=6sxz6kk2SVc" rel="noopener noreferrer">Scaling Ethereum’s Networking Stack: Mempool, Blobs &amp; Congestion Control</a>, and the ETHDenver one, <a href="https://www.youtube.com/watch?v=U3k0b2qElog" rel="noopener noreferrer">Scaling &amp; P2P</a>.</li>
+</ul>
+<h2>Open loop, closed loop</h2>
+<p>Today, Ethereum’s capacity is configured. A slot lasts 12 seconds. One proposer builds one block per slot, within a gas limit and a size limit. These numbers change through operator coordination (gas-limit voting, where changes can add up within hours) or through upgrades (blob-parameter forks and hard forks, which take months). What the system can actually carry changes within seconds: demand moves, links fill up, nodes fall behind. The difference between the plan and reality is absorbed in two places.</p>
+<ul>
+<li><strong>Before a transaction is included, price absorbs it.</strong> EIP-1559 holds throughput at a target and lets the base fee move.</li>
+<li><strong>After inclusion, safety margins absorb it.</strong> Timeouts are set for a bad day. On a good day capacity is left unused, and on a very bad day the margin isn’t enough: blocks get reorged and votes missed, and if nodes fall behind, finality stalls.</li>
+</ul>
+<p>In control terms, the capacity side of this is open loop. No protocol-wide rule adapts the capacity limits to measured resource pressure, and none reduces the work the system takes on when it is falling behind. An elastic Ethereum closes that loop.</p>
+<p>The picture I use has two grey areas (Figure 1). A transaction first sits in the mempool: submitted, not yet in a block. Then it sits in the available chain: in a block, not yet final. If the mempool is the grey area before block building, then the available chain (a tree of blocks today, a DAG in some of the designs below) is the grey area after block building, before finality. Both hold <em>work in flight</em>: work the system has taken on and not yet completed, which can still be lost.</p>
+<p>[Figure 1: shown in the media section above]</p>
+<p><em>Figure 1. A transaction’s way to finality, and the two grey areas of work in flight. Today, price acts on demand block by block, and capacity is configured. What is missing is a loop that sets block-building capacity from the state of the two grey areas.</em></p>
+<p>How far ahead of finality we let the chain run is then a choice. Further ahead can mean less waiting for inclusion and less idle capacity, at the price of more work that may be thrown away. This is what I mean by finality, seen as a compromise between latency and work conservation (not throwing work away). Latency here is counted over the whole path: the wait in the mempool, which is the first part of inclusion delay, then the wait for confirmation, then for finality.</p>
+<h2>The notion of elasticity</h2>
+<p>By elasticity I mean the capability to scale up, to scale down, and to do this fast, as demand requires and supply allows.</p>
+<p>Successful network protocols are elastic. TCP is the main example: the same protocol, with important but small changes, has carried traffic from 2.4 kbps modems to 10 Gbps fibre. It could do so because the sending rate was never a parameter of the protocol. A TCP sender finds its rate by measurement. It keeps a window of data in flight, grows the window while acknowledgements come back, and cuts it when they stop. Scaling down is as much part of the design as scaling up, and it is the part that keeps the network alive on a bad day. It is also the part that came first. TCP got this loop in 1988, after the network had collapsed, in order to stay up. The speed came with it: a sender that backs off when the network is full can safely ask for more when it isn’t. BitTorrent is another example: every downloader also uploads, so supply grows with demand.</p>
+<p>What these systems have in common:</p>
+<ul>
+<li>capacity is discovered, not configured;</li>
+<li>the control loop runs at the timescale of what it controls (round trips, not governance cycles);</li>
+<li>the same mechanism covers the good day and the bad day.</li>
+</ul>
+<h2>Why it matters: congestion collapse</h2>
+<p>So far this may read as an efficiency argument: use the spare capacity when there is some. I mean it the other way round. Elasticity is for staying alive, and using the spare capacity is what a system that can back off is then free to do.</p>
+<p>Congestion collapse is what happens when more load brings less useful work: the system is busy and gets little done. The Internet met it in October 1986, when throughput between two sites 400 yards apart dropped from 32 kbps to 40 bps (<a href="https://ee.lbl.gov/papers/congavoid.pdf" rel="noopener noreferrer">Jacobson, 1988</a>). Nagle had described the mechanism almost three years earlier (<a href="https://www.rfc-editor.org/rfc/rfc896" rel="noopener noreferrer">RFC 896</a>): hosts kept retransmitting into a network that was already full, and spare capacity had hidden the problem until then. What solved it was feedback: senders that measure, and back off. <a href="https://www.icir.org/floyd/papers/collapse.may99.pdf" rel="noopener noreferrer">Floyd and Fall (1999)</a> later listed the forms a collapse can take. In each, the network spends its capacity on work that will not count, and for the form they worried about most they name the essential factor: “the absence of end-to-end feedback”.</p>
+<p>This seems easy to avoid: just don’t try to scale, and stay far from the limit. I see three problems with that.</p>
+<ul>
+<li><strong>We do try to scale.</strong> Higher gas limits, more blobs, shorter slots: each moves the operating point closer to the limit.</li>
+<li><strong>We don’t know where the limit is.</strong> What the network and the nodes can carry at a given moment isn’t a constant, and the protocol doesn’t measure it.</li>
+<li><strong>Overload need not start with more user demand.</strong> Ethereum’s scheduled duties continue whether or not it is finalizing: a block every slot, and a vote from every validator every epoch. Without finality, the cost of doing that work can grow with the time since the last finalized checkpoint. There are more branches to track, states that can’t be pruned, and old votes that need old states. Nodes fall behind or fall over, participation drops, and finality moves further away. The loop feeds itself, and it needs no increase in demand to start.</li>
+</ul>
+<p>So non-finality can lead to congestion collapse even on a chain that never raises its capacity. Mainnet has seen two related overloads (<a href="https://prysm.offchainlabs.com/docs/resources/mainnet-postmortems/" rel="noopener noreferrer">Prysm’s post-mortems</a>). In May 2023, attestations with old targets made two clients regenerate the same old states again and again, and finality was delayed twice, by 4 and by 9 epochs. In December 2025, just after Fusaka, processing attestations against old states exhausted one client’s resources; participation fell to about 75%, and finality held. Both were overload in consensus processing, and both started from votes, not from blocks. They don’t show whether smaller blocks or longer slots would have helped. So the work to control includes votes, state regeneration and sync. This post follows one lever, block building; whether it relieves these bottlenecks remains to be shown.</p>
+<p>The Holesky testnet showed in early 2025 what a long stretch without finality does to nodes. It started with a bug, not with load: three execution clients accepted an invalid block because of a misconfigured deposit contract address, and a supermajority attested to it. What followed is the part that matters here. <a href="https://sigmaprime.io/blog/pectra-holesky-incident/" rel="noopener noreferrer">Sigma Prime’s write-up</a> reports what the long period without finality meant for Lighthouse. Database migration and side-chain pruning stopped, and the database grew from about 20 GB to over 1 TB. The inactivity scores, which the states held in memory did not share, added roughly 70 MB of state data at every epoch boundary. And nodes ran out of memory while serving unfinalized blocks to peers trying to sync. (See also <a href="https://archive.devcon.org/devcon-7/how-long-non-finality-could-kill-ethereum" rel="noopener noreferrer">How long non-finality could kill Ethereum</a>.)</p>
+<p>One detail of May 2023 is worth keeping. Lighthouse stayed up because it dropped the attestations that would have needed the old states. That is load shedding, done locally by one client, and it worked. The Prysm report also says why it isn’t a general answer: dropping was the better choice because the network was not forked, and in a forked network those attestations are needed to find the canonical chain. What to drop under overload, and when, is a question about the whole system. My argument is that this kind of control belongs in the design of the protocol, and not only in each client’s heuristics.</p>
+<p>The way out is an elastic design: a system that takes on less when work in flight piles up, and more when it clears.</p>
+<h2>Our design space</h2>
+<p>The design space is a triangle between demand, capacity (what the system offers), and system efficiency (how much of the work done is wasted). Push capacity up towards demand, and more work is done on guesses that may turn out wrong. Refuse to waste any work, and capacity sits idle while we wait to be sure.</p>
+<p>The underlying design principle is the design of systems with the following properties:</p>
+<ul>
+<li><strong>Pipelining</strong> can increase capacity and reduce the wait for inclusion, but increases potential conflicts (and thus wasted work).</li>
+<li><strong>Batching</strong> increases latency, but reduces the effective work per unit of work, and thus serves as a latency-capacity tradeoff.</li>
+<li><strong>Stable control</strong> keeps the pipelined and batched system in balance, providing elastic capacity as dictated by the current point of operation.</li>
+<li><strong>Congestion-collapse-free operation</strong> is what the above is for: under overload, the system takes on less, not more.</li>
+</ul>
+<p>Succinct proofs (what we usually call ZK proofs) deserve a mention here as the perfect batching tool. Batching amortizes: a cost paid once per batch is shared by everything in it, so a longer wait buys less work per item. A recursive proof takes this to the limit. Checking it costs about the same however much it covers (different messages, signature schemes, computation), as long as its public inputs stay small. The price is the proving, done once, by one node, for everyone.</p>
+<h2>The mempool: the grey area before block building</h2>
+<p>The role of the mempool is to pipe demand into the system. Our current design uses two control loops over the mempool:</p>
+<ul>
+<li>The short-term control is price dynamics. The average block throughput is largely constant on a longer timescale, leaving price to regulate demand for inclusion, while clients separately limit and evict in their own pools. As demand increases, blocks go above the gas target (half of the limit), leading to a base fee increase, which in turn reduces demand.</li>
+<li>The long-term control is gas-limit voting (and the even longer-term one is the All Core Devs (ACD) process and gas-limit defaults). Blob capacity moves in a similar way, in steps set by hand in blob-parameter-only forks (<a href="https://eips.ethereum.org/EIPS/eip-7892" rel="noopener noreferrer">EIP-7892</a>).</li>
+</ul>
+<p>What we are missing at this stage is a transaction pipeline that can scale up in case of resource abundance (mempool capacity, block-building capacity), and scale down in the opposite case.</p>
+<p>Related ideas:</p>
+<ul>
+<li>traditional mempool improvements;</li>
+<li>a recursive aggregating pipeline. <a href="https://eips.ethereum.org/EIPS/eip-8288" rel="noopener noreferrer">EIP-8288</a> moves signature and proof aggregation into the mempool, where nodes fold what they have seen into one recursive proof per <code>AGGREGATION_INTERVAL</code> (1 s in the draft). That interval is a batching knob: latency paid for a lower verification cost per transaction. In the EIP it is a constant. In an elastic design it is one of the things the control would set: under overload, a longer interval means less work per transaction, at the price of latency;</li>
+<li>sharded designs.</li>
+</ul>
+<h2>The available chain: the grey area between block building and finality</h2>
+<p>Once mempool capacity is unlocked, the next question is chain growth capacity, or in other words the available chain. Chain growth can be seen as a compromise between build capacity, validation capacity, and branching risk.</p>
+<p>Our current design operates in a regime where:</p>
+<ul>
+<li>build capacity is seen as a bottleneck, although we make huge strides in improving it in execution clients such as Geth;</li>
+<li>the distribution of built blocks and payloads to validators is seen as a capacity bottleneck, although we make giant steps to improve this (see <a href="https://ethresear.ch/t/seacast-fast-lean-sampled-broadcast-for-ethereum-with-an-executable-spec-and-a-formal-model/26167" rel="noopener noreferrer">SEACAST</a>);</li>
+<li>ZK proving is a potential capacity constraint;</li>
+<li>Data availability (DA) and block validation are capacity constraints.</li>
+</ul>
+<p>We are progressing consistently with bumping capacity in each one of these, and we do this without giving up on our core principles of keeping a trustless and inclusive system, or in other words without requiring datacenter-grade networking or large CPU and memory counts.</p>
+<p>However, none of these improvements gives us elasticity by itself. Elasticity is about the capability to scale both up and down, ultimately allowing us to design a more stable system, and with that a much more capable one.</p>
+<p>What I argue would provide elasticity is scalable block generation. Our current model for this is one-dimensional and capped: every slot, a node builds a block with max gas G and max size S. Where I would like us to be instead is where block generation can ramp up, sucking up unresolved transactions from the grey area of the mempool.</p>
+<p>To understand the grey area on the other side of block building, it is worth taking a closer look at what forks in the available chain actually mean. In our current design, a fork on the available chain means:</p>
+<ul>
+<li><strong>Wasted block building capacity.</strong> Only one of N forks can be finalized; all the others are wasted work and wasted gas throughput. The fee mechanism doesn’t make up for the loss: EIP-1559 computes the base fee from the parent block alone, so a missed or orphaned slot never enters it. The following blocks can take the backlog, since a block can use up to twice the target, but the mechanism reads that catch-up as a rise in demand and raises the price. This is the motivation of <a href="https://eips.ethereum.org/EIPS/eip-4396" rel="noopener noreferrer">EIP-4396</a>, which is stagnant: a missed slot takes the gas target of one block off the chain’s throughput.</li>
+<li><strong>Load on consensus clients.</strong> Multiple forks create increasing load on consensus clients, leading to increased resource utilisation, with no clear mitigation. If finality is delayed, this effect increases: the perfect recipe for the catastrophic failures described above. It is worth noting that decoupled consensus makes huge strides on some of these aspects.</li>
+</ul>
+<h3>How long should a slot be?</h3>
+<p>Underneath this forking behaviour is the tricky question of selecting a slot time (or round time, in later designs). Too short, and the available chain forks. Too long, and capacity is reduced.</p>
+<p>To see what we are choosing between, I looked at two weeks of mainnet data from <a href="https://github.com/ethpandaops/xatu" rel="noopener noreferrer">Xatu</a> (ethPandaOps): 100,548 blocks between 27 October and 9 November 2026, as seen by 233 instrumented nodes.</p>
+<p>[Figure 2: shown in the media section above]</p>
+<p><em>Figure 2. Left: when in the slot a block is first seen by any node, when it has reached 50% and 95% of the nodes, and when 95% of the nodes report it as their head, drawn separately for the nodes that Xatu lists as run by ethPandaOps or by companies and for individual contributors’ nodes. A head event comes after import, when the node has the data it samples and, in all but 0.14% of cases, has validated the payload; each client emits it at its own point. Right: the share of nodes that have a block, against the time since it was first seen anywhere, by compressed block size, with all blocks of a size class pooled.</em></p>
+<p>Read the right panel as the choice of a timeout. Give propagation 0.4 s, and 95% of all arrivals are in. Give it 0.7 s, and 99% are. Those two figures pool all blocks and nodes. Block by block, the median block has reached 95% of its nodes after 0.38 s, the 95th-percentile block after 0.58 s, and the 99th after 0.70 s. Head events come later, and here it matters whose nodes are counted. For the median block, 95% of the nodes that Xatu lists as run by ethPandaOps or by companies report it as head 0.58 s after first sighting (1.07 s for the 99th-percentile block); for individual contributors’ nodes it is 0.90 s (1.84 s). A head event follows import and fork choice, and each client emits it at its own point, so this is not exactly when a validator was ready to attest. The attestation deadline is at 4 s.</p>
+<p>The left panel shows where the rest goes. The median block is not seen by any node until 1.57 s into the slot. The steps in the curves at about 1.3, 2.3 and 3 s look like publication times, set by proposers, relays and the timing games they play. That is my reading: first sightings can’t tell those from ordinary processing between builder, relay and proposer. So the margin is spent unevenly. Most blocks leave part of it unused. In the tail, nothing is left: the 95th-percentile head event is at or after 4 s for 1.7% of blocks among the first group of nodes, and for 11.0% among the second. These are head events, not missed attestations, and the two groups differ in clients, hardware and region, so the difference has no established cause. Across all nodes, 99% of the blocks with such a late head event were first seen 2.35 s or more into the slot.</p>
+<p>Now the questions a fixed timeout cannot answer.</p>
+<p><strong>What if the block is small, or large?</strong> Size matters: the median block of 50 to 60 KiB reaches 95% of the nodes in 0.34 s, and one of 250 to 260 KiB in 0.61 s. For where we want to go, mainnet has no data: only 81 blocks in the two weeks were over 300 KiB. In the SEACAST evaluation, a 1 MiB payload takes 4.5 s to reach 99% of 500 simulated home nodes on 50 Mbps links with today’s gossipsub, and 0.64 s with SEACAST: the distribution moves with the protocol as well.</p>
+<p><strong>What if the network has a bad hour?</strong> Time of day makes no visible difference. The tail does move (Figure 3, right): hour by hour, the median block stays between 0.31 and 0.46 s, while the 99th-percentile block of each hour, the third-slowest of about 300, ranges from 0.5 s to 2.4 s.</p>
+<p><strong>What if a subsea cable has a partial outage, resulting in rerouting, increased delays and reduced capacity between continents?</strong> These two weeks can’t say. What they show is that where a node is already matters (Figure 3, left): 95% of arrivals are in after 0.30 s at nodes in Europe and after 0.58 s in Oceania. Most observations (81%) come from Europe and North America, so first sightings are likely there too, and distance, connectivity and the kind of node all play into the difference. When paths get longer, the distribution moves and the timeout doesn’t. In these two weeks it hardly moved. They don’t show whether adapting would beat a better fixed deadline: the case for measuring rests on the days that are not like these, and on capacity we haven’t tried yet.</p>
+<p>[Figure 3: shown in the media section above]</p>
+<p><em>Figure 3. Left: the share of nodes that have a block, by the node’s continent. Right: time until 95% of the nodes have a block, hour by hour, for the median block and the 99th-percentile block of each hour.</em></p>
+<p>Some caveats. The nodes are the ones that report to Xatu. Of the about 146 that report a block, about 86 are individual contributors’ nodes and about 60 are run by ethPandaOps or by companies; they are not in mainnet’s proportions of clients or regions. A share of nodes here is a share of those that reported the block. Blocks with too few observations are left out (604 of 100,548 for the head statistics by group), which can move those shares by 0.6 points at most. “First seen” is the first sighting by any of the nodes, not the moment the proposer published. A time is taken when a client’s event reaches the Xatu sentry, so it includes how that client defines and delivers the event; this moves an arrival time by tens of milliseconds. And the sizes are those of beacon blocks: blob data travels separately, although a node makes a block its head only once it has that data too. Finally, all of this is before ePBS: once the payload travels on its own, the deadlines change.</p>
+<p>Our current system, and our current consensus design, cannot react to any of this. It must overprovision, setting its timeouts high. For finality this costs time, not safety: the safety of the finality gadget doesn’t rest on a delay bound, only on less than a third of the stake being faulty. (A long partition is the exception, since the inactivity leak can then let <a href="https://ethresear.ch/t/inactivity-leak-unveiled/19774" rel="noopener noreferrer">both sides finalize</a>.) For the available chain it costs more than time: its resistance to reorgs depends on blocks and votes arriving within the timeout, so there the timeout trades reorg probability directly against throughput. Either way the system always operates at some suboptimal capacity point, either too slow or too fast.</p>
+<p>The design direction I argue for tries to overcome these shortcomings by working on two things:</p>
+<ul>
+<li>controlling the set point: the confirmation delay of the available chain, and how much block building is pipelined ahead of it;</li>
+<li>reducing the probability of conflicting builds, and the cost of the reorgs that still happen.</li>
+</ul>
+<h2>Controlling the set point: asynchronous vs synchronous operational regimes vs. the p2p reality</h2>
+<ul>
+<li>It is a fundamental rule of traditional P2P system design that there is no such thing as a reliable peer. Peers can always drop, not respond, or have temporary outages.</li>
+<li>Similarly, there are no delay guarantees on whatever action is made over the network, except the guarantees guarded by a timeout (either the interaction progresses within t &lt; T, or I act on T).</li>
+<li>Yet, consensus theory often looks at this problem as regimes of synchrony (there is a delay guarantee) and asynchrony (there is none), with partial synchrony between the two (there is one, but only from some unknown point on). To be clear, this perfectly makes sense from the point of view of modelling the consensus design and its guarantees. It is just not efficient to map to the constantly changing reality of a worldwide p2p system.</li>
+<li>What I argue for here is a stochastic interpretation of the rule, where the selection of T governs the (often unknown) probability of message passing success.</li>
+<li>Seen this way, the timeout T is a compromise to take: do I set it lower, and risk more missed deadlines, or higher, and wait longer? It is not the delay bound Δ that an analysis assumes. Measured delays can inform T, and tell how often it would have been crossed; a guarantee still needs a model of the network and of the adversary.</li>
+</ul>
+<p>TCP has worked this way since 1988. Its retransmission timeout isn’t a constant. It is computed from measured round-trip times, as the smoothed mean plus four times the mean deviation, with a recommended floor of one second, and it is doubled each time it expires (<a href="https://www.rfc-editor.org/rfc/rfc6298" rel="noopener noreferrer">RFC 6298</a>). So the timeout follows the delays that are measured, with a margin for how much they vary. Figure 2 shows the delay distribution for Ethereum blocks. We can measure it, and the protocol doesn’t use it.</p>
+<p>A consensus researcher will ask whether responsiveness doesn’t solve this already. Protocols of the <a href="https://arxiv.org/abs/1803.05069" rel="noopener noreferrer">HotStuff</a> family are responsive: once the network has stabilised and the leader is correct, they commit at the speed of the actual network delay, not of the bound Δ. Many DAG-based BFT protocols also grow their DAG as fast as quorums form. Both can, because a 2/3 quorum is in their critical path. Ethereum’s available chain gives that up on purpose, to keep making progress below the finality quorum, under its own assumptions about participation and the network, and a chain like that needs a timeout. Decoupled consensus keeps the same split: a timeout-driven available chain in the critical path, and finality next to it. So the question isn’t whether to have a timeout. It is how to choose it.</p>
+<p>Adapting to conditions is not new. BFT protocols lengthen their timeouts after a failed round, and <a href="https://arxiv.org/abs/1912.10367" rel="noopener noreferrer">Dispel</a> starts new consensus instances as resources allow. Monero and Bitcoin Cash let the block size limit follow use, and Avalanche lets its validators move the gas target and the minimum block time. Ethereum itself moves the gas limit by votes in bounded steps, and <a href="https://eips.ethereum.org/EIPS/eip-8075" rel="noopener noreferrer">EIP-8075</a> proposes a state cost that follows state growth. My question is how to tie this kind of adaptation to the work that is not yet final, on a chain that has to stay available.</p>
+<p>Assuming for a moment that we could control slot (or round) time with high granularity, how would we set it? I argue the main signals are in:</p>
+<ul>
+<li>the demand pressure, bubbling up from the mempool (whose size alone measures it poorly: cheap to inflate, and blind to private order flow);</li>
+<li>the risk of wasted work coming from network conditions;</li>
+<li>maybe most importantly, the amount of already available and not yet finalized work.</li>
+</ul>
+<p>In my mental model, the size and potential cost (wasted work) of the grey area between block building and finality is the best control signal for dictating block building capacity. In Figure 1, this is the dashed loop.</p>
+<p>The reason is that this backlog grows when the system falls behind. It grows by what we build and shrinks by what finalizes or is discarded, and a finality stall closes the first exit. Gas and data bytes, proving work and states that can’t be pruned yet each measure a different pressure. Holding the backlog costs resources even without a reorg; what we expect to lose on top depends on how likely a reorg is and on what it undoes: computation, and confirmations that users relied on.</p>
+<p>I would use this backlog as pressure that lowers the work we take on, not as a window that stops the chain when it is full. With more than a third of the stake offline, the available chain keeps going while finality can’t; a hard cap on unfinalized work would stop it too, and give whoever can delay finality a brake on everyone. So admitted work keeps a floor, and in a long outage the unfinalized history is not bounded. Which of its costs can be bounded, and how to tell overload from absent stake, is open.</p>
+<p>The analogy, spelled out:</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>TCP</th>
+<th>Ethereum</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Send buffer, with backpressure to the application</td>
+<td>Mempool, with price as backpressure</td>
+</tr>
+<tr>
+<td>Segments in flight (sent, not yet acknowledged)</td>
+<td>Blocks in the available chain, not yet final</td>
+</tr>
+<tr>
+<td>Cumulative ACK</td>
+<td>Finality</td>
+</tr>
+<tr>
+<td>Selective ACK</td>
+<td>Votes on the individual blocks of a window</td>
+</tr>
+<tr>
+<td>Retransmission timeout, from measured round trips</td>
+<td>The attestation deadline and the slot time, constants today</td>
+</tr>
+<tr>
+<td>Congestion window</td>
+<td>A limit on new work that tightens as unfinalized work grows; missing today</td>
+</tr>
+<tr>
+<td>Loss, then retransmission</td>
+<td>Orphaned block, then its still-valid transactions can be included again</td>
+</tr>
+</tbody>
+</table>
+<p>The table also shows where the analogy stops. What makes our problem harder than TCP’s:</p>
+<ul>
+<li><strong>The signal has to be agreed.</strong> A TCP sender measures alone and acts alone. A slot time or a block size has to be the same for every honest node, so the controller’s input must be something every node computes identically from the chain it builds on. We have examples: the base fee is computed from the parent block, and the inactivity leak from the distance to the last finalized checkpoint. Candidates here are that same distance, the share of empty slots among the last k of the branch, and vote participation per slot. (The chain can’t tell an orphaned slot from a missed one, unless blocks record what they orphaned, as proof-of-work Ethereum did with ommers.)</li>
+<li><strong>The finalized chain is silent when control is needed most.</strong> The natural source of a common slot time is the finalized chain (more on this below). But when finality is late, it says nothing new. The rule needs a default for that case. Reducing the new work we take on, as a TCP sender does when acknowledgements stop, is a candidate, if it relieves the resource that is overloaded and leaves room for proposals, votes and sync. Changing the slot time can also slow recovery, unless duties and penalties are rescaled with it.</li>
+<li><strong>Loop delay.</strong> Any agreed signal is at least one confirmation old. That limits how hard the controller may react: acting on old measurements can overshoot, and can oscillate.</li>
+<li><strong>Part of the signal is in the adversary’s hands.</strong> Withholding blocks or votes makes the network look slow and lowers capacity for everyone. Late publication does the same, as a side effect of timing games. TCP had the mirror image of this, with receivers that lie about what they received to make the sender go faster (Savage et al., 1999). The fix there was to make the signal hard to forge: acknowledgements that prove receipt, and a window that grows with the bytes newly acknowledged, not with the number of acknowledgements. For us that would mean a signal backed by evidence on chain, and a bound on how far it can be moved, not only by one participant in one step but by a coalition over many steps, each time capacity recovers. The floor is the last line of that defence. AIMD’s asymmetry doesn’t help here: a rule that is quick to back off is quick to obey whoever fakes congestion.</li>
+<li><strong>Measure the network, not the proposer.</strong> Figure 2 suggests that arrival time relative to the slot start says more about when a block was published than about the network. A controller needs the propagation time itself, counted from publication, and how to turn that into an agreed signal is an open part of this direction.</li>
+</ul>
+<h2>How to move block building capacity, up and down</h2>
+<p>To a first approximation, capacity is the size of a block divided by the time between blocks. Pipelining lets that time be shorter than the time a block needs to settle (to be voted in or out), by keeping several builds open at once; capacity is then the number of builds in the pipeline, times the size of a block, divided by the settle time. Independent lanes, if there are any, multiply it again.</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>Knob</th>
+<th>What it costs</th>
+<th>How it is moved, or proposed to be</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Block size</td>
+<td>Propagation, validation and building delay, so fork risk; fairness and inclusivity</td>
+<td>Gas-limit voting; blob-parameter forks</td>
+</tr>
+<tr>
+<td>Slot time</td>
+<td>Less time for each step, so fork risk; all nodes must agree on it</td>
+<td>A hard fork (<a href="https://eips.ethereum.org/EIPS/eip-7782" rel="noopener noreferrer">EIP-7782</a>, <a href="https://eips.ethereum.org/EIPS/eip-8198" rel="noopener noreferrer">EIP-8198</a>)</td>
+</tr>
+<tr>
+<td>Parallel blocks</td>
+<td>Coordination between the parallel parts</td>
+<td>Execution sharding proposals</td>
+</tr>
+<tr>
+<td>Parallel pipelining</td>
+<td>Conflicts between blocks built at the same time</td>
+<td>Rapidblocks</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Block size.</strong> The simplest approach is to control block capacity. Block capacity influences forking probability through networking (block-size-induced delays), validation (block-size-induced validation delay), and block building delay. As mentioned earlier, there is ongoing work on making each of these more efficient, but none of that changes the fact that the larger the block, the larger the probability of forking the available chain. A control loop can be formed, although it is worth mentioning potential effects on fairness (do Australian validators have a chance?) and inclusivity (do non-professional validator operators have a chance?). I want that control to keep geographically distributed home operators in: nodes that drop out must count as a warning, not as permission to raise capacity. The incentive side of these questions I leave for later.</p>
+<p><strong>Slot time.</strong> A maybe simple-sounding way (on paper, not in practice) is to reduce slot time.</p>
+<ul>
+<li>Smaller time, more blocks, more capacity. Of course only if we assume that blocks stay the same size, and are not proportionally reduced.</li>
+<li>In another version: smaller time, more blocks, but now of proportionally reduced size. While capacity is not directly increased, the finality window, and thus the potential wasted work, can be reduced.</li>
+</ul>
+<p>Clearly, with changing time assumptions, it is fundamental that nodes operate under the same time assumption. Thus, slot time should ideally be derived from the finalized chain, leading to non-trivial control-theoretical difficulties (the agreed signal and the loop delay of the previous section). It also needs an activation rule that keeps one slot schedule for everyone, across reorgs and for nodes that learn of a finalized checkpoint late.</p>
+<p><strong>Parallel blocks.</strong> Another approach is to build multiple blocks in parallel, the infamous execution sharding design. I don’t want to detail this too much; there is, I think, substantial material on this aspect.</p>
+<p><strong>Parallel pipelining.</strong> Finally, the most elegant design in my view is the complex-sounding parallel pipelining approach. It extends in the parallel dimension, but it does not try to align the parallel streams. To the contrary, it misaligns them, allowing minimal information propagation and coordination. This leaves us with three tuneables:</p>
+<ul>
+<li>the size of a block;</li>
+<li>the time window for a single built block to settle;</li>
+<li>the number of pipelined builds going on in parallel.</li>
+</ul>
+<p>In <a href="https://ethresear.ch/t/rapidblocks-take-two-a-pipelined-consensus-for-independent-blocks/26152" rel="noopener noreferrer">Rapidblocks, take two</a> these show up as the block size, the window of L slots over which a block is voted on (with its vote cadence m), and the number of slots that are concurrent: ⌈(ℓ + 2Δ)/τ⌉ while fast confirmation works, for slot time τ, vote latency ℓ and delay bound Δ, and up to the whole window when confirmations stall. The cadence is there to absorb a slow network, with m = 2 if votes are slow. In that proposal it is a constant chosen in advance. It is the kind of parameter an elastic design would set from measurement, which would mean checking the proposal’s timing assumptions again.</p>
+<p>Maybe it is worth emphasising here again that I do not have and do not advocate for a specific design. I merely outline my vision of where things could go in an Elastic Ethereum.</p>
+<h2>De-risking block building</h2>
+<p>While discussing how to de-risk the grey area between block building and finality in the previous sections, we mostly focused on the time aspect: longer slots and timeouts. Another way to de-risk pipelined building is to work on the cost of reorgs. In a networking analogy, we are speaking of SACK, or Selective ACKnowledgement, part of TCP since 1996 (<a href="https://www.rfc-editor.org/rfc/rfc2018" rel="noopener noreferrer">RFC 2018</a>). The analogy (also in my Cannes’25 talk) is simple. Instead of waiting for the next block to be confirmed, we pipeline W blocks (the window), and we confirm a rolling window. What SACK adds is that the receiver says which parts of the window arrived, so only the missing ones are resent. That works with TCP because, while packets are ordered, they are not chained, so a packet can simply be resent later and reinserted in the sequence. It works less well with a chained data structure.</p>
+<p>However, there are ways to fix this, as I outlined in Rapidblocks. There, a block doesn’t depend on its immediate predecessor, so it can be voted out without a reorg, and every vote carries an entry for each open slot of the window, which is a selective acknowledgement in all but name. The design is not final, and to make it work we should most probably differentiate between fast parallel paths and a slow sequential path, otherwise we risk censorship: a transaction that conflicts with the concurrent blocks waits for a slot where it fits, and without a sequential path that is guaranteed to take it, that wait has no bound, and someone who makes a transaction conflict on purpose can keep it out. Rapidblocks operates at the (sub-)block level, but other similar designs can operate on the conflict relation at transaction granularity.</p>
+<p>While this might sound complex, the key observation to make is that the post-quantum (PQ) transition, as planned (hash-based signatures, aggregated with proofs), takes us into an attestation aggregation regime where we are not simply doing signature aggregation over a single attestation. Aggregation then puts us on the ZKP path, where aggregation is computation: a programmable transformation that can operate on more complex data structures, such as voting windows.</p>
+<h2>The role of execution proving</h2>
+<p>Execution proofs can replace re-execution with the check of a succinct proof. Data delivery, availability checks and the remaining consensus checks still take their time, and the work moves to the provers: it is done once, and no longer by every node. More provers help only where the proving work can be split up.</p>
+<p>Some blocks cost far more to prove than their gas suggests: the <a href="https://ethresear.ch/t/the-hunt-tracking-organic-prover-killer-blocks-on-ethereum/22332" rel="noopener noreferrer">organic prover killers</a> found on mainnet typically took two to four times as long as other blocks of similar gas. A proving backlog is one more candidate signal.</p>
+<p>Proofs also add to the cost of a discarded block. In <a href="https://ethresear.ch/t/rapidblocks-with-split-proofs-execution-proofs-that-outlive-their-state/26157" rel="noopener noreferrer">Rapidblocks with split proofs</a>, the execution proof names no state root, so for the same transactions and context it stays valid over state changes that miss what the block reads; the proofs that tie it to state roots may need redoing. The vote can also ask for the proof a few rounds after the block: one more choice between latency and robustness.</p>
+<h2>Isn’t this still a constrained view?</h2>
+<p>Glad you asked. The vision of Elastic Ethereum outlined above is still rooted in the tradition of looking at block building as the central incentivized point in the system, with the chaotic environment of the mempool to its left, and pure consensus theory to its right. Does it have to be like this? Can’t we just handle the holistic pipeline from transaction generation to finality in its entirety?</p>
+<p>I think the above pipelined design, recent changes in recursive aggregation for the mempool, and recent evolutions of the decoupled consensus design all gravitate towards such a vision. In particular, with recursive signature aggregation becoming the work of the mempool (see <a href="https://eips.ethereum.org/EIPS/eip-8288" rel="noopener noreferrer">EIP-8288</a>, and also <a href="https://notes.ethereum.org/TiEH-78LQ5WCr56IEVh3Bg" rel="noopener noreferrer">Paying the mempool workers</a>), and with the possibility to decouple the handling of execution from state dependence (see <a href="https://ethresear.ch/t/rapidblocks-with-split-proofs-execution-proofs-that-outlive-their-state/26157" rel="noopener noreferrer">Rapidblocks with split proofs</a>), we can imagine a much more granular build pipeline, where part of the transactions go through a high-throughput sharded pipeline, other complex transactions go through an in-mempool execution proving path, etc.</p>
+<p>The design space is vast, but we are making huge strides.</p>
+<h2>Open questions</h2>
+<ul>
+<li><strong>Which signal?</strong> It has to be agreed, hard to game, and still there when finality isn’t.</li>
+<li><strong>How do we measure the network in-protocol, apart from the proposer’s timing?</strong></li>
+<li><strong>What is the control law?</strong> Additive increase with multiplicative decrease is the obvious start, if the feedback is honest. What are its gains and its delays on a chain, and is it stable?</li>
+<li><strong>Who is left behind?</strong> A deadline set on a percentile can keep leaving the same nodes behind, and the fixed one already treats nodes unevenly (Figure 2). Which hardware, connectivity and regions should the controller protect?</li>
+<li><strong>What do incentives do to the loop?</strong> Late publication already eats into the slack today. In a closed loop it could also push capacity down.</li>
+<li><strong>What happens to fees, and to everything counted in slots?</strong> If capacity moves, what does the EIP-1559 target follow? If the slot time moves, issuance, penalties and duties counted per slot or epoch need a rule, as <a href="https://eips.ethereum.org/EIPS/eip-8198" rel="noopener noreferrer">EIP-8198</a> gives one for a scheduled change of the slot duration.</li>
+<li><strong>What about state growth?</strong> Finality doesn’t retire it, nor the cost of catching up for a new node.</li>
+</ul></div>
+</section>
+<footer class="source-box"><span>内容来自原作者；中文为新知编辑改写，非逐字翻译。</span><div><a href="https://ethresear.ch/t/elastic-ethereum/26236" target="_blank" rel="noopener noreferrer">打开原文 ↗</a></div></footer>
+</article></body></html>
