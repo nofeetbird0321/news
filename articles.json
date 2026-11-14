@@ -1,5 +1,19 @@
 [
   {
+    "id": "himess-seam-zcash-relay-base",
+    "date": "2026-11-11",
+    "title": "Seam：用 EIP-152 在 Base 上逐个验证 Zcash 区块头，并证明屏蔽支付而不关联两条链",
+    "dek": "Base 上的合约按 Zcash 共识规则逐个校验区块头，Equihash 校验跑在 EIP-152 的 BLAKE2b 预编译上，无需信任桥、委员会或中继者即可读取 Zcash 最佳链；其上的 RISC Zero 证明能证明一笔屏蔽支付，而不让交易 id、区块和地址上链。目前仅测试网、未审计。",
+    "url": "/a/himess-seam-zcash-relay-base",
+    "source_url": "https://ethresear.ch/t/seam-verifying-zcash-headers-on-base-with-eip-152-and-proving-shielded-payments-without-linking-the-chains/26239",
+    "tags": [
+      "Web3",
+      "Zcash",
+      "跨链",
+      "零知识证明"
+    ]
+  },
+  {
     "id": "ggml-llama-cpp-v1-stable-api",
     "date": "2026-11-13",
     "title": "llama.cpp 与 ggml 发布 v1.0.0，API 与 ABI 破坏性变更将升级主版本号",
