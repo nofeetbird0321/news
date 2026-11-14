@@ -5,8 +5,900 @@
     <link>https://news.nofeetbird.tech/</link>
     <description>AI · Web3 · 数据：海外一手长文的中文改写</description>
     <language>zh-CN</language>
-    <lastBuildDate>Sat, 14 Nov 2026 00:06:00 +0000</lastBuildDate>
+    <lastBuildDate>Sat, 14 Nov 2026 00:29:00 +0000</lastBuildDate>
     <atom:link href="https://news.nofeetbird.tech/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Seam：用 EIP-152 在 Base 上逐个验证 Zcash 区块头，并证明屏蔽支付而不关联两条链</title>
+      <link>https://news.nofeetbird.tech/a/himess-seam-zcash-relay-base</link>
+      <guid isPermaLink="true">https://news.nofeetbird.tech/a/himess-seam-zcash-relay-base</guid>
+      <pubDate>Wed, 11 Nov 2026 20:55:52 +0000</pubDate>
+      <author>Semih Civelek</author>
+      <description><![CDATA[<p><em>Base 上的合约按 Zcash 共识规则逐个校验区块头，Equihash 校验跑在 EIP-152 的 BLAKE2b 预编译上，无需信任桥、委员会或中继者即可读取 Zcash 最佳链；其上的 RISC Zero 证明能证明一笔屏蔽支付，而不让交易 id、区块和地址上链。目前仅测试网、未审计。</em></p>
+<h2>中文改写</h2>
+<h2>摘要</h2>
+<ul>
+<li>Base 上的一份合约按 Zcash 的共识规则校验每一个 Zcash 区块头：Equihash (200, 9) 解跑在 EIP-152 的 BLAKE2b 预编译上，难度调整（包括 NU7 的 25 秒区块）、时间规则和累计工作量也一并核验。合约由此能在不信任桥、委员会或任何中继者的前提下读取 Zcash 的最佳链。任何人都可以喂区块头；喂头者可以延迟中继，但无法让合约接受一个被 Zcash 规则拒绝的区块头。</li>
+<li>校验一个区块头约需 626k gas（均值，按整笔交易计）；其中 Equihash 占 361k。以 25 秒出块跟随 Zcash，一天约 3,456 个区块头，约 2.2 × 10⁹ gas：按 Base 的 0.005 gwei 计，每天约 0.01 ETH。</li>
+<li>一份 2026 年 10 月 29 日以主网参数部署的中继，在无需重新部署的情况下跨过了 Zcash 主网的 NU7 激活（高度 3,543,405，2026 年 11 月 6 日），并跟上了其后的 5,405 个区块头。</li>
+<li>在中继之上还有一层：一份 RISC Zero 证明（经 Groth16 包装，在 Base 上验证需 256,720 gas），证明一笔金额至少达到某个数额的屏蔽支付，付给了应用预先承诺的接收方，附有写明应用引用的 memo，且这笔交易位于中继所持某个区块头的 ZIP 221 链历史之内。交易 id、note、区块和地址都不会到达 EVM 链。一笔真实的测试网支付在一台租用的 RTX 4090 上 81 秒完成证明，成本约一美分。</li>
+<li>仅部署在测试网，未经审计。代码（MIT 许可）、真实区块头测试集，以及文中每个数字的来源：https://github.com/Himess/seam</li>
+</ul>
+<h2>1. 为什么做这件事</h2>
+<p>如今在 EVM 应用里使用 ZEC，意味着信任某个为 Zcash 上发生的事情作证的角色：桥委员会、多签或托管方。另一种做法由来已久。BTC Relay 在 2016 年把比特币的 SPV 客户端放上以太坊，让合约可以信任工作量证明，而不是信任人。对 Zcash 来说，这条路一直被 Equihash 挡住：验证一个解需要 512 次 BLAKE2b 哈希，用普通 Solidity 写代价高得无法承受。EIP-152 写明的动机正是这一点：这条 BLAKE2b 压缩预编译在 2019 年的伊斯坦布尔升级中加入以太坊，目的就是做一个 BTC Relay 式的 Zcash SPV 客户端。</p>
+<p>现在有两件事让它变得可行。其一，L2 把逐区块头验证的成本压低到足以跟上每一个区块（见 §4）。其二，zkVM 让证明区块内容中的某个事实、同时不泄露该内容成为可能。这一点对 Zcash 比对任何其他链都重要：从某个 EVM 账户提交一笔屏蔽支付 txid 的 Merkle 证明，会把两条链关联起来，付款人花钱买来的隐私就此作废。</p>
+<h3>2.1 每个区块头必须通过的检查</h3>
+<p>规则遵循 Zebra（v7.0.0-rc.0）和各 ZIP 的定义；每一条都在代码中注明了出处。</p>
+<ol>
+<li><strong>格式与衔接</strong>。区块头总长 1,487 字节（140 字节前缀、compactSize(1344)、solution），版本号 ≥ 4，父区块必须已知，且该区块此前未被记录过。</li>
+<li><strong>时间</strong>。时间戳必须晚于此前 11 个区块时间戳的中位数；最多比该中位数晚 90 分钟；最多比 Base 的 <code>block.timestamp</code> 超前 2 小时（沿用 Zebra 的本地时钟规则，只是把节点的时钟换成了 L2 的时钟）。</li>
+<li><strong>难度。</strong><code>nBits</code> 必须等于难度调整所要求的值：调整基于平均窗口内的目标值均值，阻尼因子为 4，调整上下界为 +16% / −32%，时间戳中位数取 11 个，目标值以 PoW 极限封顶。平均窗口在 NU7 之前是 75 秒间隔下的 17 个区块，自 NU7 起是 25 秒间隔下的 102 个区块（ZIP 218、ZIP 259），切换高度在部署时固定。测试网的最小难度规则（父区块之后超过 450 秒才出的区块必须携带 <code>0x2007ffff</code>）是一个参数，在网络 id 为主网时会被拒绝。</li>
+<li><strong>Equihash (200, 9)</strong>。验证逻辑与 librustzcash 的验证器一致：使用 personalization 为 <code>ZcashPoW</code> 的 BLAKE2b-400；512 个 21 位索引；9 层中每一层都要满足 20 位碰撞；索引需满足顺序要求、彼此互异；最终根必须为零。第一个 128 字节的 BLAKE2b 数据块只压缩一次；此后每验证一个索引，只需在预编译合约（0x09）上做一次末块压缩。</li>
+<li><strong>工作量证明</strong>。对区块头做 SHA-256d，按小端序读取，结果不得超过目标值。</li>
+<li><strong>分叉选择</strong>。只有当累计工作量严格更大时，区块才能成为链头（tip），工作量按 <code>work = 2^256 / (target + 1)</code> 计算；持平时保留先看到的那一个。任意深度的链重组都会被跟随（Zebra 本身会拒绝 1,000 个区块以下的重组）。</li>
+</ol>
+<p>不检查的部分：区块内容。<code>hashMerkleRoot</code> 与 <code>hashBlockCommitments</code> 会随工作量证明一并存储，因为 PoW 本身就承诺了这两个字段；要陈述区块内容的任何事实，还需要包含证明（§5）。</p>
+<h3>2.2 喂头、链重组，以及喂头者能做什么</h3>
+<p><code>submitHeaders</code> 没有权限限制，并且会跳过中继已经持有的区块头，因此抢着提交的喂头者只会浪费 gas，不会破坏任何东西。参考喂头者通过 Zcash 的 P2P 协议获取区块头，用中继当前最优链的 block locator 跟随链重组，然后分批提交。每批 4 到 8 个区块头最划算：批量 4 时均摊到每个区块头是 597k gas，批量 16 时涨到 645k，因为内存开销随批量增长。</p>
+<p>存储设计是由审查中的一个发现决定的。如果把每个被孤立高度上的最优链索引都清掉，每清一个高度都要消耗 gas，攻击者就可以在某个旧链顶上构造一条很长但很轻的分叉，把一次诚实的重组推过单笔交易的 gas 上限，让中继卡死。现在中继只重写新分叉上的条目，把高于新链顶的高度留作陈旧条目，所有视图都会忽略这些条目（所有读取都以链顶高度为界）。重组的成本从此不再取决于被孤立的分叉。</p>
+<p><strong>喂头者可以扣住区块头不发（制造延迟），但无法伪造区块头。</strong> 如果一个应用的用户要依赖中继等待数据（例如存在截止时间，或有一笔尚未完成的结算），这个应用就应该自己运行一个喂头者，或者至少持续观察一个。</p>
+<h3>2.3 你要信任什么</h3>
+<ul>
+<li>Zcash 的工作量证明，信任到你所要求的深度（见 §3）。</li>
+<li>部署输入：检查点（一个哈希和高度，加上以它收尾的 113 个区块的时间戳和 <code>nBits</code>）和网络参数。构造函数会拒绝互相矛盾的参数，但识别不了错误的参数，所以这两项都必须与节点或区块浏览器比对。</li>
+<li>有人给它喂区块头（只涉及活性）。</li>
+<li>Base 的时钟，2 小时规则依赖它。OP Stack 保证 L2 时间戳与其 L1 origin 相差不超过 30 分钟，因此时钟偏差最多让一个区块头晚一点被接受，或者稍微提前一点被接受，<strong>绝不会让一个没有工作量证明的区块头被接受</strong>。</li>
+</ul>
+<h2>3. 最终性：看工作量，不看区块数量</h2>
+<p>Zcash 测试网有一条最低难度规则：只要新区块的时间戳比父区块晚超过 450 秒，任何人都能以难度 1 挖出一个区块。这种区块给链增加 32 个单位的工作量，而 NU7 之后测试网的一个正常区块大约增加 380,000。</p>
+<p>时间戳由矿工自行选择（在 2 小时上限之内），而一旦难度平均值窗口里容纳了这些容易的区块，后续区块也会继续容易下去：在一次模拟中，额外 300 个确认只花了 0.085 个诚实区块的工作量。</p>
+<p>所以中继暴露的接口是 <code>confirmationWork(h)</code>，即最佳链上 <code>h</code> 之上累计的工作量；至于 <code>confirmations(h)</code>，文档把它标注为便利功能，<strong>绝不作为安全度量</strong>。</p>
+<p>主网的度量方式相同，数字不同。从中继上读到的数据：截至区块 3,535,181 的 100 个区块（NU7 之前）平均每个区块贡献约 2.59 × 10¹² 的工作量；截至区块 3,548,810 的 100 个区块（NU7 之后）平均每个区块约 8.1 × 10¹¹，这 100 个区块用时 2,683 秒。</p>
+<p>一台 Equihash ASIC 的算力就能超过测试网全体矿工的总和，<strong>架在测试网上的中继提供不了任何安全保障</strong>。在主网上，应用必须要求足够高的工作量，使得私下租用算力、从锚点下方的分叉点开始把这么多工作量挖出来的成本，高于其全部未结义务加在一起的价值。</p>
+<h2>4. 实测数据</h2>
+<p>Gas 用 <code>forge test --isolate</code> 测量（每次提交都是一笔独立交易，存储读取为冷状态），solc 0.8.28，优化器运行 200 次：</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th></th>
+<th>gas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>submitHeader</code> 整笔交易，Testnet NU7 之后（102 区块窗口），32 个真实区块头</td>
+<td>最小 613,810 · 平均 625,703 · 最大 664,744</td>
+</tr>
+<tr>
+<td>同上，Mainnet NU7 之前（17 区块窗口）</td>
+<td>平均 579,490</td>
+</tr>
+<tr>
+<td>单个典型区块头的执行</td>
+<td>576,543</td>
+</tr>
+<tr>
+<td>↳ Equihash：512 次索引解码与 513 次 BLAKE2b 压缩（274,120），树检查（82,843）</td>
+<td>361,100</td>
+</tr>
+<tr>
+<td>↳ 时间规则与难度：102 个区块的平均目标值（56,766，主要来自 13 次冷读取），两个中位数（≈ 15,400）</td>
+<td>≈ 76,500</td>
+</tr>
+<tr>
+<td>↳ 存储（一条 4 插槽记录、最优链索引、链尖）与事件</td>
+<td>≈ 134,000</td>
+</tr>
+<tr>
+<td>部署，含 113 条上下文条目和 12 个参数</td>
+<td>3,253,717</td>
+</tr>
+</tbody>
+</table>
+<p>在 Base Sepolia 上给 Seam 的中继喂区块头的开销（2026 年 10 月 29 日的交易回执，gas 价格 0.005 到 0.006 gwei；L1 数据费不到每笔费用的 0.01 %）：</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th></th>
+<th>区块头数</th>
+<th>每个区块头的 gas</th>
+<th>每个区块头的 ETH</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Testnet，追赶，每批 8 个</td>
+<td>70 笔交易 557 个</td>
+<td>604,805</td>
+<td>0.00000341</td>
+</tr>
+<tr>
+<td>Testnet，跟随链尖</td>
+<td>4 笔交易 15 个</td>
+<td>600,388</td>
+<td>0.00000335</td>
+</tr>
+<tr>
+<td>Mainnet NU7 之前，追赶</td>
+<td>40 笔交易 315 个</td>
+<td>578,105</td>
+<td>0.00000321</td>
+</tr>
+</tbody>
+</table>
+<p>按 25 秒出块计算，一天为 3,456 个区块头，约 0.012 ETH；若按 Base 主网分叉上 0.005 gwei 的 base fee 计价，约每天 0.010 ETH。</p>
+<p><strong>用真实数据验证。</strong> 一套用 Python 移植的规则复现了 <code>nBits</code>，并通过了从 4,464,800 到 4,488,199 共 23,400 个 Testnet 区块头的时间规则（NU7 之前 225 个，之后 23,174 个）；每一个区块头也都通过 Equihash 和 PoW 检查。把窗口改成 17、把间隔改成 75 秒、激活高度偏移一个区块、改动阻尼系数或其舍入方式、或调换除法与乘法的顺序，任何一项都会使真实区块验证失败。</p>
+<p>在 Mainnet 上，1,600 个连续区块头（3,497,446 到 3,499,045）通过 SHA-256d 链接到 Zebra 检查点列表中的哈希，用 Mainnet 参数全部通过验证；从 Zebra 最后一个检查点到中继检查点之间的 12,706 个区块头，在部署之前已经核对过。Solidity 版 Equihash 验证器与 Zebra 调用的 <code>equihash</code> crate 在 592 个带标注用例上结果一致。80 项中继测试运行在真实区块头上；合成区块头只出现在测试里，其 Equihash 解是在 Testnet 最低难度下真实求得的。</p>
+<p><strong>Mainnet 上的 NU7。</strong> Mainnet 中继于 10 月 29 日从检查点 3,534,866 部署，NU7 激活高度为 3,543,405（ZIP 259）。它接受了激活区块（区块头时间 2026-11-06 02:34 UTC；随着窗口与间隔切换，<code>nBits</code> 从 <code>0x1b675f5f</code> 变为 <code>0x1c009054</code>）及其后的 5,405 个区块头，全程没有重新部署。</p>
+<h2>5. 以中继为基准证明一笔屏蔽支付</h2>
+<h3>5.1 待证陈述</h3>
+<p>RISC Zero guest 只有在满足以下全部条件时，才接受一份私有 witness：</p>
+<ol>
+<li><strong>Epoch（共识分支）</strong>：交易的 consensus branch id 是该构建允许的分支 id 之一。网络是一个构建参数，因此每个网络都有各自的 guest 和 image id。</li>
+<li><strong>Shape（形态）</strong>：这是一笔 v6 交易，只触及 Ironwood 池（NU6.3），没有透明部分，没有 Sapling，也没有 Orchard 池的 action。</li>
+<li><strong>Inclusion（包含性）</strong>：txid 能够通向区块 B 的 <code>hashMerkleRoot</code>。B 的 ZIP 221 history leaf 经由自身路径（path）和 peaks，连同更晚区块头 T 的 auth data root，最终通向 T 的 <code>hashBlockCommitments</code>（ZIP 244）。T 是<strong>锚点（anchor）</strong>，必须是中继持有的一个区块头。</li>
+<li><strong>note</strong>：witness 的开启信息（receiver、value、rseed）能够重建出这笔 note，且 action 的密文解密后恰好得到它，这样接收方的钱包才能发现这笔支付并可以花费。</li>
+<li><strong>memo</strong>：以 <code>seam1:</code> 开头，后接 64 个十六进制字符，这就是应用的 <code>paymentRef</code>。</li>
+<li><strong>接收方</strong>：满足 <code>receiverCommitment = keccak256(salt32 ‖ receiver43)</code>。</li>
+</ol>
+<p>guest 提交一份 192 字节的 journal：<code>(version, branchId, anchor, paymentRef, receiverCommitment, zatoshi)</code>。Base 上的验证器通过 RISC Zero 的 router，按预先固定的 image id 和 selector 校验 Groth16 seal；再校验锚点确实位于中继的最佳链上；然后返回这笔支付，以及锚点之上累积的工作量（work）。验证器是无状态的：应用把每个 <code>paymentRef</code> 绑定到一笔 obligation（义务）上，并且只结算一次。</p>
+<h3>5.2 哪些信息会进入 EVM 链</h3>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>上链</th>
+<th>永不上链</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>锚点 T，中继持有的一个区块头</td>
+<td>交易 id</td>
+</tr>
+<tr>
+<td><code>paymentRef</code>，由应用选定</td>
+<td>支付所在区块 B，即订单（order）与 T 之间的某个区块</td>
+</tr>
+<tr>
+<td><code>receiverCommitment</code></td>
+<td>note commitment 与 nullifier</td>
+</tr>
+<tr>
+<td>支付金额与 branch id</td>
+<td>接收方及其地址、viewing key、salt</td>
+</tr>
+</tbody>
+</table>
+<p>金额是公开的；若应用要求金额保密，就需要另写一份陈述（statement）。salt 必须对每笔支付都保持新鲜且保密：复用的 salt 会把多笔支付关联起来，可猜测的 salt 则让任何人都能用候选接收方去比对 commitment。</p>
+<h3>5.3 一笔真实支付的成本（Zcash 测试网，0.01 TAZ，2026 年 10 月 30 日）</h3>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>步骤</th>
+<th>实测值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>guest 执行</td>
+<td>19,918,817 个周期，分 21 个 segment，0.9 秒</td>
+</tr>
+<tr>
+<td>STARK 回执，RTX 4090</td>
+<td>43.1 秒</td>
+</tr>
+<tr>
+<td>Groth16 包装，同一台机器</td>
+<td>34.2 秒；产出 260 字节的 seal</td>
+</tr>
+<tr>
+<td>在 Base Sepolia 分叉上调用 <code>verify</code>（含 Groth16 校验）</td>
+<td>256,720 gas</td>
+</tr>
+<tr>
+<td>证明的机器成本（按每小时 $0.52 租用）</td>
+<td>≈ $0.01</td>
+</tr>
+</tbody>
+</table>
+<p>CPU 目前还走不通：同样规模的证明在一台 4 核服务器上跑了 7 小时 58 分钟。Base Sepolia 上有一个正在运行的 verifier（<a href="https://sepolia.basescan.org/address/0x1701e16350A3F0E29DC45E75F356eAc9dAB8d5f9#code" rel="noopener noreferrer"><code>0x1701…d5f9</code></a>），任何人调用它，都能取回这笔支付的 journal。</p>
+<h3>5.4 需要信任什么，以及真正要紧的边界</h3>
+<p>需要信任的清单包括：RISC Zero 的证明系统及其 Groth16 setup；RISC Zero verifier router 的治理（它可以停用一个 verifier，但换不掉 selector 背后那一个：这属于活性风险，安全性不受影响）；固定下来的 image id，任何人都能在 RISC Zero 的 Docker builder 里重新构建出它；以及预发布版本的 Zcash crates，还有打过补丁、只为 zkVM 编译的 <code>pasta_curves</code>。</p>
+<p>真正要紧的边界是经济层面的。声明校验的是包含关系和 note；Zcash 的 Halo 2 证明和签名不在其中，后者的验证本来就是 Zcash 共识在区块被挖进中继所跟随那条链时的职责。攻击者私自挖出的链可以装进任意交易，所以<strong>应用在 anchor 之上要求的工作量，必须超过其所有未完成支付加在一起的价值</strong>。一次足够深的重组，就能给其中每一笔各伪造出一笔支付。</p>
+<h3>5.5 链之外的隐私</h3>
+<p>anchor 会暴露一个区块头，所以外界知道的是，这笔支付落在订单之后、T 之前的某个区块里。要让这个候选集合保持得足够大：先固定 anchor 高度，在一段随机延迟之后再付款，并且让支付和 anchor 处于同一个 epoch 里（ZIP 221 树在每次网络升级时都会重新开始）。</p>
+<p>构建 witness 时，需要按交易 id 向一台轻钱包服务器请求这笔交易，因此该服务器会知道正在证明的是什么，除非证明者自己运行一台，或者通过 Tor 连到一台。CLI 拒绝把 witness 交给远程证明者。</p>
+<h2>6. 局限</h2>
+<ul>
+<li>仅限测试网，且未经审计。</li>
+<li>检查点和网络参数是需要信任的部署输入。</li>
+<li>活性取决于是否有人持续向中继提供数据。</li>
+<li>到目前为止，只有一笔真实的测试网支付完成了证明。主网 guest 已经固定（pinned），但尚未证明任何一笔真实的主网支付。</li>
+<li>如今能生成证明的只有持有 viewing key 的收款方，或者用 <code>seam</code> CLI 完成支付的付款方：大多数钱包不导出 note 的 opening，而借助付款方 outgoing viewing key 做恢复也尚未实现。</li>
+<li>生成证明需要 GPU。</li>
+</ul>
+<h2>7. 相关工作</h2>
+<p>BTC Relay（2016）在以太坊上确立了链上 SPV 中继的做法。EIP-152 的立项动机正是实现同类的 Zcash 中继，Consensys 的 Project Alchemy 为此用 Solidity 实现了 BLAKE2b 和 Equihash。《Bridging Sapling: Private Cross-Chain Transfers》（arXiv:2204.10611）研究了 Zcash 与其他链之间的隐私转账。ZIP 221 为 FlyClient 式轻客户端引入了链历史承诺，《Catching the Fly》（arXiv:2604.26736）则讨论了让 FlyClient 真正走向实用需要哪些条件。</p>
+<h2>8. 开放问题</h2>
+<ol>
+<li><strong>跳过区块头。</strong> ZIP 221 的历史树当初是为 FlyClient 设计的。中继能否接受一份覆盖大量区块头的抽样证明，而不是逐个验证每个区块头？当验证方是 L2 合约时，哪些抽样参数和工作量参数才是安全的？</li>
+<li><strong>逐头检查还是 zkVM 批量证明。</strong> 按每天约 2.2 × 10⁹ gas 计算，与在链下对成批区块头生成证明、链上只验证一份证明相比，盈亏平衡点在哪里？</li>
+<li><strong>给所需工作量定规模。</strong> Equihash 算力是可以租用的。有没有一种有原则可循的方法，把应用要求的工作量与其未结义务总额挂钩来设定？这项约束应该由中继强制执行，还是由应用自己执行？</li>
+<li><strong>标准化。</strong> 为 EVM 链上的 PoW 链中继设计一个统一的读取接口，值不值得做成一个 ERC？支付备忘录（memo）格式和证明语句（statement）要不要写成一份 ZIP？</li>
+</ol>
+<p>非常欢迎反馈，尤其是共识检查、重组处理和第 5.4 节的经济约束这几个部分。</p>
+<p><strong>链接</strong></p>
+<ul>
+<li>仓库与 README：https://github.com/Himess/seam</li>
+<li>中继设计、每条规则的源码出处和 gas 表：<code>contracts/src/relay/README.md</code></li>
+<li>支付证明：<code>docs/PAYMENTS.md</code>；接入方式：<code>docs/INTEGRATING.md</code>；喂送数据：<code>docs/RELAYING.md</code></li>
+<li>Base Sepolia 上的中继：测试网 <a href="https://sepolia.basescan.org/address/0x77ceDADCFf8bE399C67AB579Ad739820FaC5cE0c#code" rel="noopener noreferrer"><code>0x77ce…cE0c</code></a>，主网 <a href="https://sepolia.basescan.org/address/0x527B6347d2392d17fa5Bd13DF88A43676501BE48#code" rel="noopener noreferrer"><code>0x527B…BE48</code></a></li>
+</ul>
+<p><em>披露：Seam 由本文作者设计，并借助 AI 编程助手构建。上文中的每个数字都链接到仓库里的某个测试、文件或交易。</em></p>
+
+<h2>原文</h2>
+<p>原文取自 ethresear.ch 帖子首楼的作者原始 Markdown；论坛标题栏、作者信息和回复未收录。帖子正文没有图片或视频。</p>
+<p><em>Seam: verifying Zcash headers on Base with EIP-152, and proving shielded payments without linking the chains</em></p>
+<h2>TL;DR</h2>
+<ul>
+<li>A contract on Base checks every Zcash block header against Zcash's consensus rules: the Equihash (200, 9) solution on the EIP-152 BLAKE2b precompile, the difficulty adjustment (including NU7's 25-second blocks), the time rules and cumulative work. Contracts can then read Zcash's best chain without trusting a bridge, a committee or whoever relays. Anyone can feed it; a feeder can delay the relay but cannot make it accept a header Zcash's rules reject.</li>
+<li>One header costs about 626k gas (mean, whole transaction); Equihash is 361k of it. Following Zcash at 25-second blocks is ~3,456 headers, ≈ 2.2 × 10⁹ gas a day: about 0.01 ETH a day at Base's 0.005 gwei.</li>
+<li>A relay deployed with Mainnet parameters on 29 October 2026 crossed Zcash Mainnet's NU7 activation (height 3,543,405, 6 November 2026) without a redeploy and followed the 5,405 headers after it.</li>
+<li>On top of the relay: a RISC Zero proof (Groth16-wrapped, 256,720 gas to verify on Base) that a shielded payment of at least an amount went to a receiver an app committed to, with a memo naming the app's reference, inside the ZIP 221 chain history of a header the relay holds. The transaction id, the note, the block and the address never reach the EVM chain. A real Testnet payment was proven in 81 s on a rented RTX 4090, for about one cent.</li>
+<li>Testnets only, unaudited. Code (MIT), the real-header test corpus and the source of every number: https://github.com/Himess/seam</li>
+</ul>
+<h2>1. Why</h2>
+<p>Using ZEC in an EVM application today means trusting someone who attests to what happened on Zcash: a bridge committee, a multisig or a custodian. The alternative is old. BTC Relay put an SPV client for Bitcoin on Ethereum in 2016, so contracts could trust proof of work instead of people. For Zcash this was blocked by Equihash: verifying one solution takes 512 BLAKE2b hashes, prohibitive in plain Solidity. That was the stated motivation of EIP-152, the BLAKE2b compression precompile added in Istanbul (2019): a BTC Relay-style Zcash SPV client on Ethereum.</p>
+<p>Two things make it practical now. An L2 makes per-header verification cheap enough to follow every block (§4). And a zkVM makes it possible to prove facts about a block's contents without revealing them. That matters more for Zcash than for any other chain: a Merkle proof of a shielded payment's txid, submitted from an EVM account, links the two and undoes the privacy the payer paid for.</p>
+<h2>2. The relay</h2>
+<h3>2.1 What every header must pass</h3>
+<p>The rules follow Zebra (v7.0.0-rc.0) and the ZIPs; each one cites its source in the code.</p>
+<ol>
+<li><strong>Format and linkage.</strong> 1,487 bytes (a 140-byte prefix, compactSize(1344), the solution), version ≥ 4, a known parent, not already known.</li>
+<li><strong>Time.</strong> Later than the median of the previous 11 blocks; at most 90 minutes after that median; at most 2 hours ahead of Base's <code>block.timestamp</code> (Zebra's local-clock rule, with the L2's clock standing in for the node's).</li>
+<li><strong>Difficulty.</strong> <code>nBits</code> must equal what the adjustment requires: the mean target over the averaging window, damping factor 4, bounds of +16 % / −32 %, medians of 11 timestamps, capped at the PoW limit. The window is 17 blocks at 75 s before NU7 and 102 blocks at 25 s from NU7 (ZIP 218, ZIP 259), switched at a height fixed at deployment. Testnet's minimum-difficulty rule (a block more than 450 s after its parent must carry <code>0x2007ffff</code>) is a parameter, refused with the Mainnet network id.</li>
+<li><strong>Equihash (200, 9),</strong> following librustzcash's verifier: BLAKE2b-400 with the <code>ZcashPoW</code> personalization, 512 21-bit indices, collisions on 20 bits at each of 9 levels, ordering, distinct indices, a zero root. The first 128-byte BLAKE2b block is compressed once; each index then costs one final-block compression on the precompile (0x09).</li>
+<li><strong>Proof of work.</strong> SHA-256d of the header, read little-endian, at most the target.</li>
+<li><strong>Fork choice.</strong> A block becomes the tip only with strictly more cumulative work, where $\text{work} = 2^{256} / (\text{target} + 1)$; ties keep the first block seen. Reorganisations of any depth are followed (Zebra itself refuses to reorganise below 1,000 blocks).</li>
+</ol>
+<p>Not checked: block contents. <code>hashMerkleRoot</code> and <code>hashBlockCommitments</code> are stored as the proof of work commits to them; facts about what a block contains need an inclusion proof (§5).</p>
+<h3>2.2 Feeding, reorganisations, and what a feeder can do</h3>
+<p><code>submitHeaders</code> is permissionless and skips headers the relay already has, so racing feeders waste gas but break nothing. The reference feeder fetches headers over Zcash's P2P protocol, follows reorganisations with a block locator of the relay's best chain, and submits batches. Four to eight headers per batch is cheapest: 597k gas per header at 4, 645k at 16, where memory costs grow.</p>
+<p>One review finding shaped the storage design. Clearing the best-chain index of every orphaned height costs gas per height, so an attacker could build a long, light branch on a stale tip and push the honest reorganisation over the transaction gas limit, freezing the relay. The relay now rewrites only the new branch's entries and leaves heights above the new tip as stale entries that every view ignores (all reads are bounded by the tip height). The cost of a reorganisation no longer depends on the orphaned branch.</p>
+<p>A feeder can withhold headers (a delay) but cannot forge them. An application whose users wait on the relay (a deadline, a pending settlement) should run or at least watch a feeder of its own.</p>
+<h3>2.3 What you trust</h3>
+<ul>
+<li>Zcash's proof of work, to the depth you require (§3).</li>
+<li>The deployment input: the checkpoint (a hash and height, plus the times and <code>nBits</code> of the 113 blocks ending with it) and the network parameters. The constructor refuses inconsistent parameters, not wrong ones, so both must be compared with a node or an explorer.</li>
+<li>Someone feeding it (liveness only).</li>
+<li>Base's clock, for the 2-hour rule. The OP Stack keeps an L2 timestamp within 30 minutes of its L1 origin, so a skewed clock can delay a header or admit one slightly early, never one without the work.</li>
+</ul>
+<h2>3. Finality: require work, never a block count</h2>
+<p>Zcash Testnet's minimum-difficulty rule lets anyone mine a block at difficulty 1 when its timestamp is more than 450 s after its parent's. Such a block adds 32 units of work; a normal post-NU7 Testnet block adds about 380,000. Miners choose timestamps (within the 2-hour bound), and once the averaging window holds easy blocks the following ones stay easy too: in a simulation, 300 extra confirmations cost 0.085 of one honest block's work. So the relay exposes <code>confirmationWork(h)</code>, the cumulative work on top of <code>h</code> on the best chain, and documents <code>confirmations(h)</code> as a convenience, never a security measure.</p>
+<p>On Mainnet the measure is the same; the numbers differ. Read from the relay: the 100 blocks up to 3,535,181 (before NU7) added about 2.59 × 10¹² work per block; the 100 blocks up to 3,548,810 (after NU7) about 8.1 × 10¹¹ per block, in 2,683 s. A single Equihash ASIC outpaces all of Testnet's miners, so a Testnet relay secures nothing. On Mainnet an application must require enough work that renting the hashrate to mine it in private, from a fork point below the anchor, costs more than everything its open obligations hold together.</p>
+<h2>4. Measurements</h2>
+<p>Gas, with <code>forge test --isolate</code> (every submission its own transaction, cold storage), solc 0.8.28, 200 optimizer runs:</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th></th>
+<th>gas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>submitHeader</code>, whole transaction, Testnet after NU7 (102-block window), 32 real headers</td>
+<td>min 613,810 · mean 625,703 · max 664,744</td>
+</tr>
+<tr>
+<td>the same, Mainnet before NU7 (17-block window)</td>
+<td>mean 579,490</td>
+</tr>
+<tr>
+<td>execution of one typical header</td>
+<td>576,543</td>
+</tr>
+<tr>
+<td>↳ Equihash: 512 index decodes and 513 BLAKE2b compressions (274,120), tree check (82,843)</td>
+<td>361,100</td>
+</tr>
+<tr>
+<td>↳ time rules and difficulty: mean target over 102 blocks (56,766, mostly 13 cold reads), two medians (≈ 15,400)</td>
+<td>≈ 76,500</td>
+</tr>
+<tr>
+<td>↳ storage (a 4-slot record, the best-chain index, the tip) and events</td>
+<td>≈ 134,000</td>
+</tr>
+<tr>
+<td>deployment, with the 113 context entries and 12 parameters</td>
+<td>3,253,717</td>
+</tr>
+</tbody>
+</table>
+<p>Feeding Seam's relays on Base Sepolia (receipts of 29 October 2026, gas price 0.005 to 0.006 gwei; the L1 data fee was under 0.01 % of each fee):</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th></th>
+<th>headers</th>
+<th>gas per header</th>
+<th>ETH per header</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Testnet, catching up, batches of 8</td>
+<td>557 in 70 txs</td>
+<td>604,805</td>
+<td>0.00000341</td>
+</tr>
+<tr>
+<td>Testnet, following the tip</td>
+<td>15 in 4 txs</td>
+<td>600,388</td>
+<td>0.00000335</td>
+</tr>
+<tr>
+<td>Mainnet before NU7, catching up</td>
+<td>315 in 40 txs</td>
+<td>578,105</td>
+<td>0.00000321</td>
+</tr>
+</tbody>
+</table>
+<p>At 25-second blocks that is 3,456 headers and ≈ 0.012 ETH a day; priced on a Base mainnet fork at a 0.005 gwei base fee, ≈ 0.010 ETH a day.</p>
+<p><strong>Validation against real data.</strong> A Python port of the rules reproduces <code>nBits</code> and passes the time rules for all 23,400 Testnet headers from 4,464,800 to 4,488,199 (225 before NU7, 23,174 after); every one also passes Equihash and PoW. Changing the window to 17, the spacing to 75 s, the activation height by one block, the damping, its rounding, or the order of division and multiplication each breaks real blocks. On Mainnet, 1,600 consecutive headers (3,497,446 .. 3,499,045), linked by SHA-256d to hashes in Zebra's checkpoint list, pass with Mainnet parameters, and the 12,706 headers from Zebra's last checkpoint up to the relay's checkpoint were checked before deployment. The Solidity Equihash verifier agrees with the <code>equihash</code> crate Zebra calls on 592 labelled cases. The 80 relay tests run on real headers; synthetic headers appear only in tests, with genuine Equihash solutions found at Testnet's minimum difficulty.</p>
+<p><strong>NU7 on Mainnet.</strong> The Mainnet relay was deployed on 29 October from checkpoint 3,534,866, with NU7 at 3,543,405 (ZIP 259). It accepted the activation block (header time 2026-11-06 02:34 UTC; <code>nBits</code> went from <code>0x1b675f5f</code> to <code>0x1c009054</code> as the window and the spacing switched) and the 5,405 headers after it, with no redeploy.</p>
+<h2>5. Proving a shielded payment against the relay</h2>
+<h3>5.1 The statement</h3>
+<p>A RISC Zero guest accepts a private witness only if:</p>
+<ol>
+<li><strong>Epoch.</strong> The transaction's consensus branch id is one the build allows. The network is a build parameter, so each network has its own guest and image id.</li>
+<li><strong>Shape.</strong> A v6 transaction that touches only the Ironwood pool (NU6.3): no transparent part, no Sapling, no Orchard-pool action.</li>
+<li><strong>Inclusion.</strong> The txid reaches block B's <code>hashMerkleRoot</code>. B's ZIP 221 history leaf, through its path and the peaks, together with the auth data root of a later header T, reaches T's <code>hashBlockCommitments</code> (ZIP 244). T is the <strong>anchor</strong> and must be a header the relay holds.</li>
+<li><strong>The note.</strong> The witness's opening (receiver, value, rseed) rebuilds the note, and the action's ciphertext decrypts to exactly that note, so the receiver's wallet finds it and can spend it.</li>
+<li><strong>The memo</strong> starts with <code>seam1:</code> and 64 hex digits: the app's <code>paymentRef</code>.</li>
+<li><strong>The receiver</strong> matches <code>receiverCommitment = keccak256(salt32 ‖ receiver43)</code>.</li>
+</ol>
+<p>The guest commits a 192-byte journal: <code>(version, branchId, anchor, paymentRef, receiverCommitment, zatoshi)</code>. The verifier on Base checks the Groth16 seal through RISC Zero's router for a pinned image id and selector, checks that the anchor is on the relay's best chain, and returns the payment and the work on top of the anchor. It is stateless: the application binds each <code>paymentRef</code> to one obligation and settles it once.</p>
+<h3>5.2 What reaches the EVM chain</h3>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>On chain</th>
+<th>Never on chain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>the anchor T, a header the relay holds</td>
+<td>the transaction id</td>
+</tr>
+<tr>
+<td><code>paymentRef</code>, chosen by the app</td>
+<td>the payment's block B, one of the blocks between the order and T</td>
+</tr>
+<tr>
+<td><code>receiverCommitment</code></td>
+<td>the note commitment and the nullifier</td>
+</tr>
+<tr>
+<td>the value and the branch id</td>
+<td>the receiver, its address and viewing key, the salt</td>
+</tr>
+</tbody>
+</table>
+<p>The value is public; an application whose amounts must stay private needs a different statement. The salt must be fresh and secret for each payment: a reused salt links payments, and a guessable one lets anyone test candidate receivers against the commitment.</p>
+<h3>5.3 Cost of one real payment (0.01 TAZ on Zcash Testnet, 30 October 2026)</h3>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>Step</th>
+<th>Measured</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>guest execution</td>
+<td>19,918,817 cycles in 21 segments, 0.9 s</td>
+</tr>
+<tr>
+<td>STARK receipt, RTX 4090</td>
+<td>43.1 s</td>
+</tr>
+<tr>
+<td>Groth16 wrap, same machine</td>
+<td>34.2 s; a 260-byte seal</td>
+</tr>
+<tr>
+<td><code>verify</code> on a Base Sepolia fork, with the Groth16 check</td>
+<td>256,720 gas</td>
+</tr>
+<tr>
+<td>machine cost of the proof (rented at $0.52 an hour)</td>
+<td>≈ $0.01</td>
+</tr>
+</tbody>
+</table>
+<p>A CPU is not an option yet: a proof of the same size ran for 7 h 58 min on a 4-core server. A live verifier on Base Sepolia (<a href="https://sepolia.basescan.org/address/0x1701e16350A3F0E29DC45E75F356eAc9dAB8d5f9#code" rel="noopener noreferrer"><code>0x1701…d5f9</code></a>) returns this payment's journal to anyone who calls it.</p>
+<h3>5.4 What you trust, and the bound that matters</h3>
+<p>RISC Zero's proof system and its Groth16 setup; the governance of RISC Zero's verifier router (it can stop a verifier but not swap the one behind a selector: a liveness risk, not a safety risk); the pinned image id, which anyone can rebuild in RISC Zero's Docker builder; pre-release Zcash crates and a patched <code>pasta_curves</code> compiled only for the zkVM.</p>
+<p>The bound that matters is economic. The statement checks inclusion and the note, not Zcash's Halo 2 proofs or signatures: those were Zcash consensus's job when the block was mined into the chain the relay follows. A chain an attacker mines in private can carry any transaction, so the work an application requires on top of an anchor must outweigh the value of all its open payments together. One deep enough reorganisation could fake a payment for each of them.</p>
+<h3>5.5 Privacy beyond the chain</h3>
+<p>The anchor reveals a header, so the payment is known to sit in some block after the order and before T. To keep that set large: fix the anchor height first, pay after a random delay, and keep payment and anchor in one epoch (the ZIP 221 tree restarts at every network upgrade). Building the witness asks a light wallet server for the transaction by its id, so that server learns what is being proven unless the prover runs its own or reaches one over Tor. The CLI refuses to hand a witness to a remote prover.</p>
+<h2>6. Limitations</h2>
+<ul>
+<li>Testnets only; unaudited.</li>
+<li>The checkpoint and the network parameters are trusted deployment input.</li>
+<li>Liveness depends on someone feeding the relay.</li>
+<li>One real Testnet payment has been proven so far. The Mainnet guest is pinned but has proven no real Mainnet payment.</li>
+<li>Today only the receiver (with its viewing key), or a payer who paid with the <code>seam</code> CLI, can prove: most wallets don't export a note's opening, and recovery with the payer's outgoing viewing key is not implemented yet.</li>
+<li>Proving needs a GPU.</li>
+</ul>
+<h2>7. Related work</h2>
+<p>BTC Relay (2016) established on-chain SPV relays on Ethereum. EIP-152's motivation was a Zcash relay of the same kind, and Consensys' Project Alchemy implemented BLAKE2b and Equihash in Solidity towards it. "Bridging Sapling: Private Cross-Chain Transfers" (arXiv:2204.10611) studies private transfers between Zcash and other chains. ZIP 221 commits to chain history for FlyClient-style light clients, and "Catching the Fly" (arXiv:2604.26736) discusses what it takes to make FlyClient practical.</p>
+<h2>8. Open questions</h2>
+<ol>
+<li><strong>Skipping headers.</strong> ZIP 221's history tree was designed for FlyClient. Could a relay accept a sampled proof over many headers instead of every header, and which sampling and work parameters are safe when an L2 contract is the verifier?</li>
+<li><strong>Per-header checks or zkVM batches.</strong> At ~2.2 × 10⁹ gas a day, where is the break-even with proving batches of headers off-chain and verifying one proof?</li>
+<li><strong>Sizing the required work.</strong> Equihash hashrate can be rented. Is there a principled way to set the work an application requires against its total open obligations, and should the relay or the application enforce it?</li>
+<li><strong>Standards.</strong> Is a common reader interface for PoW-chain relays on EVM chains worth an ERC? Should the payment memo format and statement become a ZIP?</li>
+</ol>
+<p>Feedback is very welcome, especially on the consensus checks, the reorganisation handling and the economic bound in §5.4.</p>
+<p><strong>Links</strong></p>
+<ul>
+<li>Repository and README: https://github.com/Himess/seam</li>
+<li>Relay design, every rule's source and the gas table: <code>contracts/src/relay/README.md</code></li>
+<li>Payment proofs: <code>docs/PAYMENTS.md</code>; integrating: <code>docs/INTEGRATING.md</code>; feeding: <code>docs/RELAYING.md</code></li>
+<li>Relays on Base Sepolia: Testnet <a href="https://sepolia.basescan.org/address/0x77ceDADCFf8bE399C67AB579Ad739820FaC5cE0c#code" rel="noopener noreferrer"><code>0x77ce…cE0c</code></a>, Mainnet <a href="https://sepolia.basescan.org/address/0x527B6347d2392d17fa5Bd13DF88A43676501BE48#code" rel="noopener noreferrer"><code>0x527B…BE48</code></a></li>
+</ul>
+<p><em>Disclosure: I designed Seam and built it with AI coding assistants. Every number above links to a test, a file or a transaction in the repository.</em></p>
+<p><strong>原文链接：</strong><a href="https://ethresear.ch/t/seam-verifying-zcash-headers-on-base-with-eip-152-and-proving-shielded-payments-without-linking-the-chains/26239">https://ethresear.ch/t/seam-verifying-zcash-headers-on-base-with-eip-152-and-proving-shielded-payments-without-linking-the-chains/26239</a></p>
+<p><strong>相关链接：</strong><a href="https://github.com/Himess/seam">https://github.com/Himess/seam</a></p>]]></description>
+      <content:encoded><![CDATA[<p><em>Base 上的合约按 Zcash 共识规则逐个校验区块头，Equihash 校验跑在 EIP-152 的 BLAKE2b 预编译上，无需信任桥、委员会或中继者即可读取 Zcash 最佳链；其上的 RISC Zero 证明能证明一笔屏蔽支付，而不让交易 id、区块和地址上链。目前仅测试网、未审计。</em></p>
+<h2>中文改写</h2>
+<h2>摘要</h2>
+<ul>
+<li>Base 上的一份合约按 Zcash 的共识规则校验每一个 Zcash 区块头：Equihash (200, 9) 解跑在 EIP-152 的 BLAKE2b 预编译上，难度调整（包括 NU7 的 25 秒区块）、时间规则和累计工作量也一并核验。合约由此能在不信任桥、委员会或任何中继者的前提下读取 Zcash 的最佳链。任何人都可以喂区块头；喂头者可以延迟中继，但无法让合约接受一个被 Zcash 规则拒绝的区块头。</li>
+<li>校验一个区块头约需 626k gas（均值，按整笔交易计）；其中 Equihash 占 361k。以 25 秒出块跟随 Zcash，一天约 3,456 个区块头，约 2.2 × 10⁹ gas：按 Base 的 0.005 gwei 计，每天约 0.01 ETH。</li>
+<li>一份 2026 年 10 月 29 日以主网参数部署的中继，在无需重新部署的情况下跨过了 Zcash 主网的 NU7 激活（高度 3,543,405，2026 年 11 月 6 日），并跟上了其后的 5,405 个区块头。</li>
+<li>在中继之上还有一层：一份 RISC Zero 证明（经 Groth16 包装，在 Base 上验证需 256,720 gas），证明一笔金额至少达到某个数额的屏蔽支付，付给了应用预先承诺的接收方，附有写明应用引用的 memo，且这笔交易位于中继所持某个区块头的 ZIP 221 链历史之内。交易 id、note、区块和地址都不会到达 EVM 链。一笔真实的测试网支付在一台租用的 RTX 4090 上 81 秒完成证明，成本约一美分。</li>
+<li>仅部署在测试网，未经审计。代码（MIT 许可）、真实区块头测试集，以及文中每个数字的来源：https://github.com/Himess/seam</li>
+</ul>
+<h2>1. 为什么做这件事</h2>
+<p>如今在 EVM 应用里使用 ZEC，意味着信任某个为 Zcash 上发生的事情作证的角色：桥委员会、多签或托管方。另一种做法由来已久。BTC Relay 在 2016 年把比特币的 SPV 客户端放上以太坊，让合约可以信任工作量证明，而不是信任人。对 Zcash 来说，这条路一直被 Equihash 挡住：验证一个解需要 512 次 BLAKE2b 哈希，用普通 Solidity 写代价高得无法承受。EIP-152 写明的动机正是这一点：这条 BLAKE2b 压缩预编译在 2019 年的伊斯坦布尔升级中加入以太坊，目的就是做一个 BTC Relay 式的 Zcash SPV 客户端。</p>
+<p>现在有两件事让它变得可行。其一，L2 把逐区块头验证的成本压低到足以跟上每一个区块（见 §4）。其二，zkVM 让证明区块内容中的某个事实、同时不泄露该内容成为可能。这一点对 Zcash 比对任何其他链都重要：从某个 EVM 账户提交一笔屏蔽支付 txid 的 Merkle 证明，会把两条链关联起来，付款人花钱买来的隐私就此作废。</p>
+<h3>2.1 每个区块头必须通过的检查</h3>
+<p>规则遵循 Zebra（v7.0.0-rc.0）和各 ZIP 的定义；每一条都在代码中注明了出处。</p>
+<ol>
+<li><strong>格式与衔接</strong>。区块头总长 1,487 字节（140 字节前缀、compactSize(1344)、solution），版本号 ≥ 4，父区块必须已知，且该区块此前未被记录过。</li>
+<li><strong>时间</strong>。时间戳必须晚于此前 11 个区块时间戳的中位数；最多比该中位数晚 90 分钟；最多比 Base 的 <code>block.timestamp</code> 超前 2 小时（沿用 Zebra 的本地时钟规则，只是把节点的时钟换成了 L2 的时钟）。</li>
+<li><strong>难度。</strong><code>nBits</code> 必须等于难度调整所要求的值：调整基于平均窗口内的目标值均值，阻尼因子为 4，调整上下界为 +16% / −32%，时间戳中位数取 11 个，目标值以 PoW 极限封顶。平均窗口在 NU7 之前是 75 秒间隔下的 17 个区块，自 NU7 起是 25 秒间隔下的 102 个区块（ZIP 218、ZIP 259），切换高度在部署时固定。测试网的最小难度规则（父区块之后超过 450 秒才出的区块必须携带 <code>0x2007ffff</code>）是一个参数，在网络 id 为主网时会被拒绝。</li>
+<li><strong>Equihash (200, 9)</strong>。验证逻辑与 librustzcash 的验证器一致：使用 personalization 为 <code>ZcashPoW</code> 的 BLAKE2b-400；512 个 21 位索引；9 层中每一层都要满足 20 位碰撞；索引需满足顺序要求、彼此互异；最终根必须为零。第一个 128 字节的 BLAKE2b 数据块只压缩一次；此后每验证一个索引，只需在预编译合约（0x09）上做一次末块压缩。</li>
+<li><strong>工作量证明</strong>。对区块头做 SHA-256d，按小端序读取，结果不得超过目标值。</li>
+<li><strong>分叉选择</strong>。只有当累计工作量严格更大时，区块才能成为链头（tip），工作量按 <code>work = 2^256 / (target + 1)</code> 计算；持平时保留先看到的那一个。任意深度的链重组都会被跟随（Zebra 本身会拒绝 1,000 个区块以下的重组）。</li>
+</ol>
+<p>不检查的部分：区块内容。<code>hashMerkleRoot</code> 与 <code>hashBlockCommitments</code> 会随工作量证明一并存储，因为 PoW 本身就承诺了这两个字段；要陈述区块内容的任何事实，还需要包含证明（§5）。</p>
+<h3>2.2 喂头、链重组，以及喂头者能做什么</h3>
+<p><code>submitHeaders</code> 没有权限限制，并且会跳过中继已经持有的区块头，因此抢着提交的喂头者只会浪费 gas，不会破坏任何东西。参考喂头者通过 Zcash 的 P2P 协议获取区块头，用中继当前最优链的 block locator 跟随链重组，然后分批提交。每批 4 到 8 个区块头最划算：批量 4 时均摊到每个区块头是 597k gas，批量 16 时涨到 645k，因为内存开销随批量增长。</p>
+<p>存储设计是由审查中的一个发现决定的。如果把每个被孤立高度上的最优链索引都清掉，每清一个高度都要消耗 gas，攻击者就可以在某个旧链顶上构造一条很长但很轻的分叉，把一次诚实的重组推过单笔交易的 gas 上限，让中继卡死。现在中继只重写新分叉上的条目，把高于新链顶的高度留作陈旧条目，所有视图都会忽略这些条目（所有读取都以链顶高度为界）。重组的成本从此不再取决于被孤立的分叉。</p>
+<p><strong>喂头者可以扣住区块头不发（制造延迟），但无法伪造区块头。</strong> 如果一个应用的用户要依赖中继等待数据（例如存在截止时间，或有一笔尚未完成的结算），这个应用就应该自己运行一个喂头者，或者至少持续观察一个。</p>
+<h3>2.3 你要信任什么</h3>
+<ul>
+<li>Zcash 的工作量证明，信任到你所要求的深度（见 §3）。</li>
+<li>部署输入：检查点（一个哈希和高度，加上以它收尾的 113 个区块的时间戳和 <code>nBits</code>）和网络参数。构造函数会拒绝互相矛盾的参数，但识别不了错误的参数，所以这两项都必须与节点或区块浏览器比对。</li>
+<li>有人给它喂区块头（只涉及活性）。</li>
+<li>Base 的时钟，2 小时规则依赖它。OP Stack 保证 L2 时间戳与其 L1 origin 相差不超过 30 分钟，因此时钟偏差最多让一个区块头晚一点被接受，或者稍微提前一点被接受，<strong>绝不会让一个没有工作量证明的区块头被接受</strong>。</li>
+</ul>
+<h2>3. 最终性：看工作量，不看区块数量</h2>
+<p>Zcash 测试网有一条最低难度规则：只要新区块的时间戳比父区块晚超过 450 秒，任何人都能以难度 1 挖出一个区块。这种区块给链增加 32 个单位的工作量，而 NU7 之后测试网的一个正常区块大约增加 380,000。</p>
+<p>时间戳由矿工自行选择（在 2 小时上限之内），而一旦难度平均值窗口里容纳了这些容易的区块，后续区块也会继续容易下去：在一次模拟中，额外 300 个确认只花了 0.085 个诚实区块的工作量。</p>
+<p>所以中继暴露的接口是 <code>confirmationWork(h)</code>，即最佳链上 <code>h</code> 之上累计的工作量；至于 <code>confirmations(h)</code>，文档把它标注为便利功能，<strong>绝不作为安全度量</strong>。</p>
+<p>主网的度量方式相同，数字不同。从中继上读到的数据：截至区块 3,535,181 的 100 个区块（NU7 之前）平均每个区块贡献约 2.59 × 10¹² 的工作量；截至区块 3,548,810 的 100 个区块（NU7 之后）平均每个区块约 8.1 × 10¹¹，这 100 个区块用时 2,683 秒。</p>
+<p>一台 Equihash ASIC 的算力就能超过测试网全体矿工的总和，<strong>架在测试网上的中继提供不了任何安全保障</strong>。在主网上，应用必须要求足够高的工作量，使得私下租用算力、从锚点下方的分叉点开始把这么多工作量挖出来的成本，高于其全部未结义务加在一起的价值。</p>
+<h2>4. 实测数据</h2>
+<p>Gas 用 <code>forge test --isolate</code> 测量（每次提交都是一笔独立交易，存储读取为冷状态），solc 0.8.28，优化器运行 200 次：</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th></th>
+<th>gas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>submitHeader</code> 整笔交易，Testnet NU7 之后（102 区块窗口），32 个真实区块头</td>
+<td>最小 613,810 · 平均 625,703 · 最大 664,744</td>
+</tr>
+<tr>
+<td>同上，Mainnet NU7 之前（17 区块窗口）</td>
+<td>平均 579,490</td>
+</tr>
+<tr>
+<td>单个典型区块头的执行</td>
+<td>576,543</td>
+</tr>
+<tr>
+<td>↳ Equihash：512 次索引解码与 513 次 BLAKE2b 压缩（274,120），树检查（82,843）</td>
+<td>361,100</td>
+</tr>
+<tr>
+<td>↳ 时间规则与难度：102 个区块的平均目标值（56,766，主要来自 13 次冷读取），两个中位数（≈ 15,400）</td>
+<td>≈ 76,500</td>
+</tr>
+<tr>
+<td>↳ 存储（一条 4 插槽记录、最优链索引、链尖）与事件</td>
+<td>≈ 134,000</td>
+</tr>
+<tr>
+<td>部署，含 113 条上下文条目和 12 个参数</td>
+<td>3,253,717</td>
+</tr>
+</tbody>
+</table>
+<p>在 Base Sepolia 上给 Seam 的中继喂区块头的开销（2026 年 10 月 29 日的交易回执，gas 价格 0.005 到 0.006 gwei；L1 数据费不到每笔费用的 0.01 %）：</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th></th>
+<th>区块头数</th>
+<th>每个区块头的 gas</th>
+<th>每个区块头的 ETH</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Testnet，追赶，每批 8 个</td>
+<td>70 笔交易 557 个</td>
+<td>604,805</td>
+<td>0.00000341</td>
+</tr>
+<tr>
+<td>Testnet，跟随链尖</td>
+<td>4 笔交易 15 个</td>
+<td>600,388</td>
+<td>0.00000335</td>
+</tr>
+<tr>
+<td>Mainnet NU7 之前，追赶</td>
+<td>40 笔交易 315 个</td>
+<td>578,105</td>
+<td>0.00000321</td>
+</tr>
+</tbody>
+</table>
+<p>按 25 秒出块计算，一天为 3,456 个区块头，约 0.012 ETH；若按 Base 主网分叉上 0.005 gwei 的 base fee 计价，约每天 0.010 ETH。</p>
+<p><strong>用真实数据验证。</strong> 一套用 Python 移植的规则复现了 <code>nBits</code>，并通过了从 4,464,800 到 4,488,199 共 23,400 个 Testnet 区块头的时间规则（NU7 之前 225 个，之后 23,174 个）；每一个区块头也都通过 Equihash 和 PoW 检查。把窗口改成 17、把间隔改成 75 秒、激活高度偏移一个区块、改动阻尼系数或其舍入方式、或调换除法与乘法的顺序，任何一项都会使真实区块验证失败。</p>
+<p>在 Mainnet 上，1,600 个连续区块头（3,497,446 到 3,499,045）通过 SHA-256d 链接到 Zebra 检查点列表中的哈希，用 Mainnet 参数全部通过验证；从 Zebra 最后一个检查点到中继检查点之间的 12,706 个区块头，在部署之前已经核对过。Solidity 版 Equihash 验证器与 Zebra 调用的 <code>equihash</code> crate 在 592 个带标注用例上结果一致。80 项中继测试运行在真实区块头上；合成区块头只出现在测试里，其 Equihash 解是在 Testnet 最低难度下真实求得的。</p>
+<p><strong>Mainnet 上的 NU7。</strong> Mainnet 中继于 10 月 29 日从检查点 3,534,866 部署，NU7 激活高度为 3,543,405（ZIP 259）。它接受了激活区块（区块头时间 2026-11-06 02:34 UTC；随着窗口与间隔切换，<code>nBits</code> 从 <code>0x1b675f5f</code> 变为 <code>0x1c009054</code>）及其后的 5,405 个区块头，全程没有重新部署。</p>
+<h2>5. 以中继为基准证明一笔屏蔽支付</h2>
+<h3>5.1 待证陈述</h3>
+<p>RISC Zero guest 只有在满足以下全部条件时，才接受一份私有 witness：</p>
+<ol>
+<li><strong>Epoch（共识分支）</strong>：交易的 consensus branch id 是该构建允许的分支 id 之一。网络是一个构建参数，因此每个网络都有各自的 guest 和 image id。</li>
+<li><strong>Shape（形态）</strong>：这是一笔 v6 交易，只触及 Ironwood 池（NU6.3），没有透明部分，没有 Sapling，也没有 Orchard 池的 action。</li>
+<li><strong>Inclusion（包含性）</strong>：txid 能够通向区块 B 的 <code>hashMerkleRoot</code>。B 的 ZIP 221 history leaf 经由自身路径（path）和 peaks，连同更晚区块头 T 的 auth data root，最终通向 T 的 <code>hashBlockCommitments</code>（ZIP 244）。T 是<strong>锚点（anchor）</strong>，必须是中继持有的一个区块头。</li>
+<li><strong>note</strong>：witness 的开启信息（receiver、value、rseed）能够重建出这笔 note，且 action 的密文解密后恰好得到它，这样接收方的钱包才能发现这笔支付并可以花费。</li>
+<li><strong>memo</strong>：以 <code>seam1:</code> 开头，后接 64 个十六进制字符，这就是应用的 <code>paymentRef</code>。</li>
+<li><strong>接收方</strong>：满足 <code>receiverCommitment = keccak256(salt32 ‖ receiver43)</code>。</li>
+</ol>
+<p>guest 提交一份 192 字节的 journal：<code>(version, branchId, anchor, paymentRef, receiverCommitment, zatoshi)</code>。Base 上的验证器通过 RISC Zero 的 router，按预先固定的 image id 和 selector 校验 Groth16 seal；再校验锚点确实位于中继的最佳链上；然后返回这笔支付，以及锚点之上累积的工作量（work）。验证器是无状态的：应用把每个 <code>paymentRef</code> 绑定到一笔 obligation（义务）上，并且只结算一次。</p>
+<h3>5.2 哪些信息会进入 EVM 链</h3>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>上链</th>
+<th>永不上链</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>锚点 T，中继持有的一个区块头</td>
+<td>交易 id</td>
+</tr>
+<tr>
+<td><code>paymentRef</code>，由应用选定</td>
+<td>支付所在区块 B，即订单（order）与 T 之间的某个区块</td>
+</tr>
+<tr>
+<td><code>receiverCommitment</code></td>
+<td>note commitment 与 nullifier</td>
+</tr>
+<tr>
+<td>支付金额与 branch id</td>
+<td>接收方及其地址、viewing key、salt</td>
+</tr>
+</tbody>
+</table>
+<p>金额是公开的；若应用要求金额保密，就需要另写一份陈述（statement）。salt 必须对每笔支付都保持新鲜且保密：复用的 salt 会把多笔支付关联起来，可猜测的 salt 则让任何人都能用候选接收方去比对 commitment。</p>
+<h3>5.3 一笔真实支付的成本（Zcash 测试网，0.01 TAZ，2026 年 10 月 30 日）</h3>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>步骤</th>
+<th>实测值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>guest 执行</td>
+<td>19,918,817 个周期，分 21 个 segment，0.9 秒</td>
+</tr>
+<tr>
+<td>STARK 回执，RTX 4090</td>
+<td>43.1 秒</td>
+</tr>
+<tr>
+<td>Groth16 包装，同一台机器</td>
+<td>34.2 秒；产出 260 字节的 seal</td>
+</tr>
+<tr>
+<td>在 Base Sepolia 分叉上调用 <code>verify</code>（含 Groth16 校验）</td>
+<td>256,720 gas</td>
+</tr>
+<tr>
+<td>证明的机器成本（按每小时 $0.52 租用）</td>
+<td>≈ $0.01</td>
+</tr>
+</tbody>
+</table>
+<p>CPU 目前还走不通：同样规模的证明在一台 4 核服务器上跑了 7 小时 58 分钟。Base Sepolia 上有一个正在运行的 verifier（<a href="https://sepolia.basescan.org/address/0x1701e16350A3F0E29DC45E75F356eAc9dAB8d5f9#code" rel="noopener noreferrer"><code>0x1701…d5f9</code></a>），任何人调用它，都能取回这笔支付的 journal。</p>
+<h3>5.4 需要信任什么，以及真正要紧的边界</h3>
+<p>需要信任的清单包括：RISC Zero 的证明系统及其 Groth16 setup；RISC Zero verifier router 的治理（它可以停用一个 verifier，但换不掉 selector 背后那一个：这属于活性风险，安全性不受影响）；固定下来的 image id，任何人都能在 RISC Zero 的 Docker builder 里重新构建出它；以及预发布版本的 Zcash crates，还有打过补丁、只为 zkVM 编译的 <code>pasta_curves</code>。</p>
+<p>真正要紧的边界是经济层面的。声明校验的是包含关系和 note；Zcash 的 Halo 2 证明和签名不在其中，后者的验证本来就是 Zcash 共识在区块被挖进中继所跟随那条链时的职责。攻击者私自挖出的链可以装进任意交易，所以<strong>应用在 anchor 之上要求的工作量，必须超过其所有未完成支付加在一起的价值</strong>。一次足够深的重组，就能给其中每一笔各伪造出一笔支付。</p>
+<h3>5.5 链之外的隐私</h3>
+<p>anchor 会暴露一个区块头，所以外界知道的是，这笔支付落在订单之后、T 之前的某个区块里。要让这个候选集合保持得足够大：先固定 anchor 高度，在一段随机延迟之后再付款，并且让支付和 anchor 处于同一个 epoch 里（ZIP 221 树在每次网络升级时都会重新开始）。</p>
+<p>构建 witness 时，需要按交易 id 向一台轻钱包服务器请求这笔交易，因此该服务器会知道正在证明的是什么，除非证明者自己运行一台，或者通过 Tor 连到一台。CLI 拒绝把 witness 交给远程证明者。</p>
+<h2>6. 局限</h2>
+<ul>
+<li>仅限测试网，且未经审计。</li>
+<li>检查点和网络参数是需要信任的部署输入。</li>
+<li>活性取决于是否有人持续向中继提供数据。</li>
+<li>到目前为止，只有一笔真实的测试网支付完成了证明。主网 guest 已经固定（pinned），但尚未证明任何一笔真实的主网支付。</li>
+<li>如今能生成证明的只有持有 viewing key 的收款方，或者用 <code>seam</code> CLI 完成支付的付款方：大多数钱包不导出 note 的 opening，而借助付款方 outgoing viewing key 做恢复也尚未实现。</li>
+<li>生成证明需要 GPU。</li>
+</ul>
+<h2>7. 相关工作</h2>
+<p>BTC Relay（2016）在以太坊上确立了链上 SPV 中继的做法。EIP-152 的立项动机正是实现同类的 Zcash 中继，Consensys 的 Project Alchemy 为此用 Solidity 实现了 BLAKE2b 和 Equihash。《Bridging Sapling: Private Cross-Chain Transfers》（arXiv:2204.10611）研究了 Zcash 与其他链之间的隐私转账。ZIP 221 为 FlyClient 式轻客户端引入了链历史承诺，《Catching the Fly》（arXiv:2604.26736）则讨论了让 FlyClient 真正走向实用需要哪些条件。</p>
+<h2>8. 开放问题</h2>
+<ol>
+<li><strong>跳过区块头。</strong> ZIP 221 的历史树当初是为 FlyClient 设计的。中继能否接受一份覆盖大量区块头的抽样证明，而不是逐个验证每个区块头？当验证方是 L2 合约时，哪些抽样参数和工作量参数才是安全的？</li>
+<li><strong>逐头检查还是 zkVM 批量证明。</strong> 按每天约 2.2 × 10⁹ gas 计算，与在链下对成批区块头生成证明、链上只验证一份证明相比，盈亏平衡点在哪里？</li>
+<li><strong>给所需工作量定规模。</strong> Equihash 算力是可以租用的。有没有一种有原则可循的方法，把应用要求的工作量与其未结义务总额挂钩来设定？这项约束应该由中继强制执行，还是由应用自己执行？</li>
+<li><strong>标准化。</strong> 为 EVM 链上的 PoW 链中继设计一个统一的读取接口，值不值得做成一个 ERC？支付备忘录（memo）格式和证明语句（statement）要不要写成一份 ZIP？</li>
+</ol>
+<p>非常欢迎反馈，尤其是共识检查、重组处理和第 5.4 节的经济约束这几个部分。</p>
+<p><strong>链接</strong></p>
+<ul>
+<li>仓库与 README：https://github.com/Himess/seam</li>
+<li>中继设计、每条规则的源码出处和 gas 表：<code>contracts/src/relay/README.md</code></li>
+<li>支付证明：<code>docs/PAYMENTS.md</code>；接入方式：<code>docs/INTEGRATING.md</code>；喂送数据：<code>docs/RELAYING.md</code></li>
+<li>Base Sepolia 上的中继：测试网 <a href="https://sepolia.basescan.org/address/0x77ceDADCFf8bE399C67AB579Ad739820FaC5cE0c#code" rel="noopener noreferrer"><code>0x77ce…cE0c</code></a>，主网 <a href="https://sepolia.basescan.org/address/0x527B6347d2392d17fa5Bd13DF88A43676501BE48#code" rel="noopener noreferrer"><code>0x527B…BE48</code></a></li>
+</ul>
+<p><em>披露：Seam 由本文作者设计，并借助 AI 编程助手构建。上文中的每个数字都链接到仓库里的某个测试、文件或交易。</em></p>
+
+<h2>原文</h2>
+<p>原文取自 ethresear.ch 帖子首楼的作者原始 Markdown；论坛标题栏、作者信息和回复未收录。帖子正文没有图片或视频。</p>
+<p><em>Seam: verifying Zcash headers on Base with EIP-152, and proving shielded payments without linking the chains</em></p>
+<h2>TL;DR</h2>
+<ul>
+<li>A contract on Base checks every Zcash block header against Zcash's consensus rules: the Equihash (200, 9) solution on the EIP-152 BLAKE2b precompile, the difficulty adjustment (including NU7's 25-second blocks), the time rules and cumulative work. Contracts can then read Zcash's best chain without trusting a bridge, a committee or whoever relays. Anyone can feed it; a feeder can delay the relay but cannot make it accept a header Zcash's rules reject.</li>
+<li>One header costs about 626k gas (mean, whole transaction); Equihash is 361k of it. Following Zcash at 25-second blocks is ~3,456 headers, ≈ 2.2 × 10⁹ gas a day: about 0.01 ETH a day at Base's 0.005 gwei.</li>
+<li>A relay deployed with Mainnet parameters on 29 October 2026 crossed Zcash Mainnet's NU7 activation (height 3,543,405, 6 November 2026) without a redeploy and followed the 5,405 headers after it.</li>
+<li>On top of the relay: a RISC Zero proof (Groth16-wrapped, 256,720 gas to verify on Base) that a shielded payment of at least an amount went to a receiver an app committed to, with a memo naming the app's reference, inside the ZIP 221 chain history of a header the relay holds. The transaction id, the note, the block and the address never reach the EVM chain. A real Testnet payment was proven in 81 s on a rented RTX 4090, for about one cent.</li>
+<li>Testnets only, unaudited. Code (MIT), the real-header test corpus and the source of every number: https://github.com/Himess/seam</li>
+</ul>
+<h2>1. Why</h2>
+<p>Using ZEC in an EVM application today means trusting someone who attests to what happened on Zcash: a bridge committee, a multisig or a custodian. The alternative is old. BTC Relay put an SPV client for Bitcoin on Ethereum in 2016, so contracts could trust proof of work instead of people. For Zcash this was blocked by Equihash: verifying one solution takes 512 BLAKE2b hashes, prohibitive in plain Solidity. That was the stated motivation of EIP-152, the BLAKE2b compression precompile added in Istanbul (2019): a BTC Relay-style Zcash SPV client on Ethereum.</p>
+<p>Two things make it practical now. An L2 makes per-header verification cheap enough to follow every block (§4). And a zkVM makes it possible to prove facts about a block's contents without revealing them. That matters more for Zcash than for any other chain: a Merkle proof of a shielded payment's txid, submitted from an EVM account, links the two and undoes the privacy the payer paid for.</p>
+<h2>2. The relay</h2>
+<h3>2.1 What every header must pass</h3>
+<p>The rules follow Zebra (v7.0.0-rc.0) and the ZIPs; each one cites its source in the code.</p>
+<ol>
+<li><strong>Format and linkage.</strong> 1,487 bytes (a 140-byte prefix, compactSize(1344), the solution), version ≥ 4, a known parent, not already known.</li>
+<li><strong>Time.</strong> Later than the median of the previous 11 blocks; at most 90 minutes after that median; at most 2 hours ahead of Base's <code>block.timestamp</code> (Zebra's local-clock rule, with the L2's clock standing in for the node's).</li>
+<li><strong>Difficulty.</strong> <code>nBits</code> must equal what the adjustment requires: the mean target over the averaging window, damping factor 4, bounds of +16 % / −32 %, medians of 11 timestamps, capped at the PoW limit. The window is 17 blocks at 75 s before NU7 and 102 blocks at 25 s from NU7 (ZIP 218, ZIP 259), switched at a height fixed at deployment. Testnet's minimum-difficulty rule (a block more than 450 s after its parent must carry <code>0x2007ffff</code>) is a parameter, refused with the Mainnet network id.</li>
+<li><strong>Equihash (200, 9),</strong> following librustzcash's verifier: BLAKE2b-400 with the <code>ZcashPoW</code> personalization, 512 21-bit indices, collisions on 20 bits at each of 9 levels, ordering, distinct indices, a zero root. The first 128-byte BLAKE2b block is compressed once; each index then costs one final-block compression on the precompile (0x09).</li>
+<li><strong>Proof of work.</strong> SHA-256d of the header, read little-endian, at most the target.</li>
+<li><strong>Fork choice.</strong> A block becomes the tip only with strictly more cumulative work, where $\text{work} = 2^{256} / (\text{target} + 1)$; ties keep the first block seen. Reorganisations of any depth are followed (Zebra itself refuses to reorganise below 1,000 blocks).</li>
+</ol>
+<p>Not checked: block contents. <code>hashMerkleRoot</code> and <code>hashBlockCommitments</code> are stored as the proof of work commits to them; facts about what a block contains need an inclusion proof (§5).</p>
+<h3>2.2 Feeding, reorganisations, and what a feeder can do</h3>
+<p><code>submitHeaders</code> is permissionless and skips headers the relay already has, so racing feeders waste gas but break nothing. The reference feeder fetches headers over Zcash's P2P protocol, follows reorganisations with a block locator of the relay's best chain, and submits batches. Four to eight headers per batch is cheapest: 597k gas per header at 4, 645k at 16, where memory costs grow.</p>
+<p>One review finding shaped the storage design. Clearing the best-chain index of every orphaned height costs gas per height, so an attacker could build a long, light branch on a stale tip and push the honest reorganisation over the transaction gas limit, freezing the relay. The relay now rewrites only the new branch's entries and leaves heights above the new tip as stale entries that every view ignores (all reads are bounded by the tip height). The cost of a reorganisation no longer depends on the orphaned branch.</p>
+<p>A feeder can withhold headers (a delay) but cannot forge them. An application whose users wait on the relay (a deadline, a pending settlement) should run or at least watch a feeder of its own.</p>
+<h3>2.3 What you trust</h3>
+<ul>
+<li>Zcash's proof of work, to the depth you require (§3).</li>
+<li>The deployment input: the checkpoint (a hash and height, plus the times and <code>nBits</code> of the 113 blocks ending with it) and the network parameters. The constructor refuses inconsistent parameters, not wrong ones, so both must be compared with a node or an explorer.</li>
+<li>Someone feeding it (liveness only).</li>
+<li>Base's clock, for the 2-hour rule. The OP Stack keeps an L2 timestamp within 30 minutes of its L1 origin, so a skewed clock can delay a header or admit one slightly early, never one without the work.</li>
+</ul>
+<h2>3. Finality: require work, never a block count</h2>
+<p>Zcash Testnet's minimum-difficulty rule lets anyone mine a block at difficulty 1 when its timestamp is more than 450 s after its parent's. Such a block adds 32 units of work; a normal post-NU7 Testnet block adds about 380,000. Miners choose timestamps (within the 2-hour bound), and once the averaging window holds easy blocks the following ones stay easy too: in a simulation, 300 extra confirmations cost 0.085 of one honest block's work. So the relay exposes <code>confirmationWork(h)</code>, the cumulative work on top of <code>h</code> on the best chain, and documents <code>confirmations(h)</code> as a convenience, never a security measure.</p>
+<p>On Mainnet the measure is the same; the numbers differ. Read from the relay: the 100 blocks up to 3,535,181 (before NU7) added about 2.59 × 10¹² work per block; the 100 blocks up to 3,548,810 (after NU7) about 8.1 × 10¹¹ per block, in 2,683 s. A single Equihash ASIC outpaces all of Testnet's miners, so a Testnet relay secures nothing. On Mainnet an application must require enough work that renting the hashrate to mine it in private, from a fork point below the anchor, costs more than everything its open obligations hold together.</p>
+<h2>4. Measurements</h2>
+<p>Gas, with <code>forge test --isolate</code> (every submission its own transaction, cold storage), solc 0.8.28, 200 optimizer runs:</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th></th>
+<th>gas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>submitHeader</code>, whole transaction, Testnet after NU7 (102-block window), 32 real headers</td>
+<td>min 613,810 · mean 625,703 · max 664,744</td>
+</tr>
+<tr>
+<td>the same, Mainnet before NU7 (17-block window)</td>
+<td>mean 579,490</td>
+</tr>
+<tr>
+<td>execution of one typical header</td>
+<td>576,543</td>
+</tr>
+<tr>
+<td>↳ Equihash: 512 index decodes and 513 BLAKE2b compressions (274,120), tree check (82,843)</td>
+<td>361,100</td>
+</tr>
+<tr>
+<td>↳ time rules and difficulty: mean target over 102 blocks (56,766, mostly 13 cold reads), two medians (≈ 15,400)</td>
+<td>≈ 76,500</td>
+</tr>
+<tr>
+<td>↳ storage (a 4-slot record, the best-chain index, the tip) and events</td>
+<td>≈ 134,000</td>
+</tr>
+<tr>
+<td>deployment, with the 113 context entries and 12 parameters</td>
+<td>3,253,717</td>
+</tr>
+</tbody>
+</table>
+<p>Feeding Seam's relays on Base Sepolia (receipts of 29 October 2026, gas price 0.005 to 0.006 gwei; the L1 data fee was under 0.01 % of each fee):</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th></th>
+<th>headers</th>
+<th>gas per header</th>
+<th>ETH per header</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Testnet, catching up, batches of 8</td>
+<td>557 in 70 txs</td>
+<td>604,805</td>
+<td>0.00000341</td>
+</tr>
+<tr>
+<td>Testnet, following the tip</td>
+<td>15 in 4 txs</td>
+<td>600,388</td>
+<td>0.00000335</td>
+</tr>
+<tr>
+<td>Mainnet before NU7, catching up</td>
+<td>315 in 40 txs</td>
+<td>578,105</td>
+<td>0.00000321</td>
+</tr>
+</tbody>
+</table>
+<p>At 25-second blocks that is 3,456 headers and ≈ 0.012 ETH a day; priced on a Base mainnet fork at a 0.005 gwei base fee, ≈ 0.010 ETH a day.</p>
+<p><strong>Validation against real data.</strong> A Python port of the rules reproduces <code>nBits</code> and passes the time rules for all 23,400 Testnet headers from 4,464,800 to 4,488,199 (225 before NU7, 23,174 after); every one also passes Equihash and PoW. Changing the window to 17, the spacing to 75 s, the activation height by one block, the damping, its rounding, or the order of division and multiplication each breaks real blocks. On Mainnet, 1,600 consecutive headers (3,497,446 .. 3,499,045), linked by SHA-256d to hashes in Zebra's checkpoint list, pass with Mainnet parameters, and the 12,706 headers from Zebra's last checkpoint up to the relay's checkpoint were checked before deployment. The Solidity Equihash verifier agrees with the <code>equihash</code> crate Zebra calls on 592 labelled cases. The 80 relay tests run on real headers; synthetic headers appear only in tests, with genuine Equihash solutions found at Testnet's minimum difficulty.</p>
+<p><strong>NU7 on Mainnet.</strong> The Mainnet relay was deployed on 29 October from checkpoint 3,534,866, with NU7 at 3,543,405 (ZIP 259). It accepted the activation block (header time 2026-11-06 02:34 UTC; <code>nBits</code> went from <code>0x1b675f5f</code> to <code>0x1c009054</code> as the window and the spacing switched) and the 5,405 headers after it, with no redeploy.</p>
+<h2>5. Proving a shielded payment against the relay</h2>
+<h3>5.1 The statement</h3>
+<p>A RISC Zero guest accepts a private witness only if:</p>
+<ol>
+<li><strong>Epoch.</strong> The transaction's consensus branch id is one the build allows. The network is a build parameter, so each network has its own guest and image id.</li>
+<li><strong>Shape.</strong> A v6 transaction that touches only the Ironwood pool (NU6.3): no transparent part, no Sapling, no Orchard-pool action.</li>
+<li><strong>Inclusion.</strong> The txid reaches block B's <code>hashMerkleRoot</code>. B's ZIP 221 history leaf, through its path and the peaks, together with the auth data root of a later header T, reaches T's <code>hashBlockCommitments</code> (ZIP 244). T is the <strong>anchor</strong> and must be a header the relay holds.</li>
+<li><strong>The note.</strong> The witness's opening (receiver, value, rseed) rebuilds the note, and the action's ciphertext decrypts to exactly that note, so the receiver's wallet finds it and can spend it.</li>
+<li><strong>The memo</strong> starts with <code>seam1:</code> and 64 hex digits: the app's <code>paymentRef</code>.</li>
+<li><strong>The receiver</strong> matches <code>receiverCommitment = keccak256(salt32 ‖ receiver43)</code>.</li>
+</ol>
+<p>The guest commits a 192-byte journal: <code>(version, branchId, anchor, paymentRef, receiverCommitment, zatoshi)</code>. The verifier on Base checks the Groth16 seal through RISC Zero's router for a pinned image id and selector, checks that the anchor is on the relay's best chain, and returns the payment and the work on top of the anchor. It is stateless: the application binds each <code>paymentRef</code> to one obligation and settles it once.</p>
+<h3>5.2 What reaches the EVM chain</h3>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>On chain</th>
+<th>Never on chain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>the anchor T, a header the relay holds</td>
+<td>the transaction id</td>
+</tr>
+<tr>
+<td><code>paymentRef</code>, chosen by the app</td>
+<td>the payment's block B, one of the blocks between the order and T</td>
+</tr>
+<tr>
+<td><code>receiverCommitment</code></td>
+<td>the note commitment and the nullifier</td>
+</tr>
+<tr>
+<td>the value and the branch id</td>
+<td>the receiver, its address and viewing key, the salt</td>
+</tr>
+</tbody>
+</table>
+<p>The value is public; an application whose amounts must stay private needs a different statement. The salt must be fresh and secret for each payment: a reused salt links payments, and a guessable one lets anyone test candidate receivers against the commitment.</p>
+<h3>5.3 Cost of one real payment (0.01 TAZ on Zcash Testnet, 30 October 2026)</h3>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>Step</th>
+<th>Measured</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>guest execution</td>
+<td>19,918,817 cycles in 21 segments, 0.9 s</td>
+</tr>
+<tr>
+<td>STARK receipt, RTX 4090</td>
+<td>43.1 s</td>
+</tr>
+<tr>
+<td>Groth16 wrap, same machine</td>
+<td>34.2 s; a 260-byte seal</td>
+</tr>
+<tr>
+<td><code>verify</code> on a Base Sepolia fork, with the Groth16 check</td>
+<td>256,720 gas</td>
+</tr>
+<tr>
+<td>machine cost of the proof (rented at $0.52 an hour)</td>
+<td>≈ $0.01</td>
+</tr>
+</tbody>
+</table>
+<p>A CPU is not an option yet: a proof of the same size ran for 7 h 58 min on a 4-core server. A live verifier on Base Sepolia (<a href="https://sepolia.basescan.org/address/0x1701e16350A3F0E29DC45E75F356eAc9dAB8d5f9#code" rel="noopener noreferrer"><code>0x1701…d5f9</code></a>) returns this payment's journal to anyone who calls it.</p>
+<h3>5.4 What you trust, and the bound that matters</h3>
+<p>RISC Zero's proof system and its Groth16 setup; the governance of RISC Zero's verifier router (it can stop a verifier but not swap the one behind a selector: a liveness risk, not a safety risk); the pinned image id, which anyone can rebuild in RISC Zero's Docker builder; pre-release Zcash crates and a patched <code>pasta_curves</code> compiled only for the zkVM.</p>
+<p>The bound that matters is economic. The statement checks inclusion and the note, not Zcash's Halo 2 proofs or signatures: those were Zcash consensus's job when the block was mined into the chain the relay follows. A chain an attacker mines in private can carry any transaction, so the work an application requires on top of an anchor must outweigh the value of all its open payments together. One deep enough reorganisation could fake a payment for each of them.</p>
+<h3>5.5 Privacy beyond the chain</h3>
+<p>The anchor reveals a header, so the payment is known to sit in some block after the order and before T. To keep that set large: fix the anchor height first, pay after a random delay, and keep payment and anchor in one epoch (the ZIP 221 tree restarts at every network upgrade). Building the witness asks a light wallet server for the transaction by its id, so that server learns what is being proven unless the prover runs its own or reaches one over Tor. The CLI refuses to hand a witness to a remote prover.</p>
+<h2>6. Limitations</h2>
+<ul>
+<li>Testnets only; unaudited.</li>
+<li>The checkpoint and the network parameters are trusted deployment input.</li>
+<li>Liveness depends on someone feeding the relay.</li>
+<li>One real Testnet payment has been proven so far. The Mainnet guest is pinned but has proven no real Mainnet payment.</li>
+<li>Today only the receiver (with its viewing key), or a payer who paid with the <code>seam</code> CLI, can prove: most wallets don't export a note's opening, and recovery with the payer's outgoing viewing key is not implemented yet.</li>
+<li>Proving needs a GPU.</li>
+</ul>
+<h2>7. Related work</h2>
+<p>BTC Relay (2016) established on-chain SPV relays on Ethereum. EIP-152's motivation was a Zcash relay of the same kind, and Consensys' Project Alchemy implemented BLAKE2b and Equihash in Solidity towards it. "Bridging Sapling: Private Cross-Chain Transfers" (arXiv:2204.10611) studies private transfers between Zcash and other chains. ZIP 221 commits to chain history for FlyClient-style light clients, and "Catching the Fly" (arXiv:2604.26736) discusses what it takes to make FlyClient practical.</p>
+<h2>8. Open questions</h2>
+<ol>
+<li><strong>Skipping headers.</strong> ZIP 221's history tree was designed for FlyClient. Could a relay accept a sampled proof over many headers instead of every header, and which sampling and work parameters are safe when an L2 contract is the verifier?</li>
+<li><strong>Per-header checks or zkVM batches.</strong> At ~2.2 × 10⁹ gas a day, where is the break-even with proving batches of headers off-chain and verifying one proof?</li>
+<li><strong>Sizing the required work.</strong> Equihash hashrate can be rented. Is there a principled way to set the work an application requires against its total open obligations, and should the relay or the application enforce it?</li>
+<li><strong>Standards.</strong> Is a common reader interface for PoW-chain relays on EVM chains worth an ERC? Should the payment memo format and statement become a ZIP?</li>
+</ol>
+<p>Feedback is very welcome, especially on the consensus checks, the reorganisation handling and the economic bound in §5.4.</p>
+<p><strong>Links</strong></p>
+<ul>
+<li>Repository and README: https://github.com/Himess/seam</li>
+<li>Relay design, every rule's source and the gas table: <code>contracts/src/relay/README.md</code></li>
+<li>Payment proofs: <code>docs/PAYMENTS.md</code>; integrating: <code>docs/INTEGRATING.md</code>; feeding: <code>docs/RELAYING.md</code></li>
+<li>Relays on Base Sepolia: Testnet <a href="https://sepolia.basescan.org/address/0x77ceDADCFf8bE399C67AB579Ad739820FaC5cE0c#code" rel="noopener noreferrer"><code>0x77ce…cE0c</code></a>, Mainnet <a href="https://sepolia.basescan.org/address/0x527B6347d2392d17fa5Bd13DF88A43676501BE48#code" rel="noopener noreferrer"><code>0x527B…BE48</code></a></li>
+</ul>
+<p><em>Disclosure: I designed Seam and built it with AI coding assistants. Every number above links to a test, a file or a transaction in the repository.</em></p>
+<p><strong>原文链接：</strong><a href="https://ethresear.ch/t/seam-verifying-zcash-headers-on-base-with-eip-152-and-proving-shielded-payments-without-linking-the-chains/26239">https://ethresear.ch/t/seam-verifying-zcash-headers-on-base-with-eip-152-and-proving-shielded-payments-without-linking-the-chains/26239</a></p>
+<p><strong>相关链接：</strong><a href="https://github.com/Himess/seam">https://github.com/Himess/seam</a></p>]]></content:encoded>
+      <xinzhi:versions><![CDATA[{"version": 1, "original": {"title": "Seam: verifying Zcash headers on Base with EIP-152, and proving shielded payments without linking the chains", "url": "https://ethresear.ch/t/seam-verifying-zcash-headers-on-base-with-eip-152-and-proving-shielded-payments-without-linking-the-chains/26239", "lang": "en", "html": "<h2>Seam: verifying Zcash headers on Base with EIP-152, and proving shielded payments without linking the chains</h2>\n<p>原文取自 ethresear.ch 帖子首楼的作者原始 Markdown；论坛标题栏、作者信息和回复未收录。帖子正文没有图片或视频。</p>\n\n<h2>TL;DR</h2>\n<ul>\n<li>A contract on Base checks every Zcash block header against Zcash's consensus rules: the Equihash (200, 9) solution on the EIP-152 BLAKE2b precompile, the difficulty adjustment (including NU7's 25-second blocks), the time rules and cumulative work. Contracts can then read Zcash's best chain without trusting a bridge, a committee or whoever relays. Anyone can feed it; a feeder can delay the relay but cannot make it accept a header Zcash's rules reject.</li>\n<li>One header costs about 626k gas (mean, whole transaction); Equihash is 361k of it. Following Zcash at 25-second blocks is ~3,456 headers, ≈ 2.2 × 10⁹ gas a day: about 0.01 ETH a day at Base's 0.005 gwei.</li>\n<li>A relay deployed with Mainnet parameters on 29 October 2026 crossed Zcash Mainnet's NU7 activation (height 3,543,405, 6 November 2026) without a redeploy and followed the 5,405 headers after it.</li>\n<li>On top of the relay: a RISC Zero proof (Groth16-wrapped, 256,720 gas to verify on Base) that a shielded payment of at least an amount went to a receiver an app committed to, with a memo naming the app's reference, inside the ZIP 221 chain history of a header the relay holds. The transaction id, the note, the block and the address never reach the EVM chain. A real Testnet payment was proven in 81 s on a rented RTX 4090, for about one cent.</li>\n<li>Testnets only, unaudited. Code (MIT), the real-header test corpus and the source of every number: https://github.com/Himess/seam</li>\n</ul>\n<h2>1. Why</h2>\n<p>Using ZEC in an EVM application today means trusting someone who attests to what happened on Zcash: a bridge committee, a multisig or a custodian. The alternative is old. BTC Relay put an SPV client for Bitcoin on Ethereum in 2016, so contracts could trust proof of work instead of people. For Zcash this was blocked by Equihash: verifying one solution takes 512 BLAKE2b hashes, prohibitive in plain Solidity. That was the stated motivation of EIP-152, the BLAKE2b compression precompile added in Istanbul (2019): a BTC Relay-style Zcash SPV client on Ethereum.</p>\n<p>Two things make it practical now. An L2 makes per-header verification cheap enough to follow every block (§4). And a zkVM makes it possible to prove facts about a block's contents without revealing them. That matters more for Zcash than for any other chain: a Merkle proof of a shielded payment's txid, submitted from an EVM account, links the two and undoes the privacy the payer paid for.</p>\n<h2>2. The relay</h2>\n<h3>2.1 What every header must pass</h3>\n<p>The rules follow Zebra (v7.0.0-rc.0) and the ZIPs; each one cites its source in the code.</p>\n<ol>\n<li><strong>Format and linkage.</strong> 1,487 bytes (a 140-byte prefix, compactSize(1344), the solution), version ≥ 4, a known parent, not already known.</li>\n<li><strong>Time.</strong> Later than the median of the previous 11 blocks; at most 90 minutes after that median; at most 2 hours ahead of Base's <code>block.timestamp</code> (Zebra's local-clock rule, with the L2's clock standing in for the node's).</li>\n<li><strong>Difficulty.</strong> <code>nBits</code> must equal what the adjustment requires: the mean target over the averaging window, damping factor 4, bounds of +16 % / −32 %, medians of 11 timestamps, capped at the PoW limit. The window is 17 blocks at 75 s before NU7 and 102 blocks at 25 s from NU7 (ZIP 218, ZIP 259), switched at a height fixed at deployment. Testnet's minimum-difficulty rule (a block more than 450 s after its parent must carry <code>0x2007ffff</code>) is a parameter, refused with the Mainnet network id.</li>\n<li><strong>Equihash (200, 9),</strong> following librustzcash's verifier: BLAKE2b-400 with the <code>ZcashPoW</code> personalization, 512 21-bit indices, collisions on 20 bits at each of 9 levels, ordering, distinct indices, a zero root. The first 128-byte BLAKE2b block is compressed once; each index then costs one final-block compression on the precompile (0x09).</li>\n<li><strong>Proof of work.</strong> SHA-256d of the header, read little-endian, at most the target.</li>\n<li><strong>Fork choice.</strong> A block becomes the tip only with strictly more cumulative work, where $\\text{work} = 2^{256} / (\\text{target} + 1)$; ties keep the first block seen. Reorganisations of any depth are followed (Zebra itself refuses to reorganise below 1,000 blocks).</li>\n</ol>\n<p>Not checked: block contents. <code>hashMerkleRoot</code> and <code>hashBlockCommitments</code> are stored as the proof of work commits to them; facts about what a block contains need an inclusion proof (§5).</p>\n<h3>2.2 Feeding, reorganisations, and what a feeder can do</h3>\n<p><code>submitHeaders</code> is permissionless and skips headers the relay already has, so racing feeders waste gas but break nothing. The reference feeder fetches headers over Zcash's P2P protocol, follows reorganisations with a block locator of the relay's best chain, and submits batches. Four to eight headers per batch is cheapest: 597k gas per header at 4, 645k at 16, where memory costs grow.</p>\n<p>One review finding shaped the storage design. Clearing the best-chain index of every orphaned height costs gas per height, so an attacker could build a long, light branch on a stale tip and push the honest reorganisation over the transaction gas limit, freezing the relay. The relay now rewrites only the new branch's entries and leaves heights above the new tip as stale entries that every view ignores (all reads are bounded by the tip height). The cost of a reorganisation no longer depends on the orphaned branch.</p>\n<p>A feeder can withhold headers (a delay) but cannot forge them. An application whose users wait on the relay (a deadline, a pending settlement) should run or at least watch a feeder of its own.</p>\n<h3>2.3 What you trust</h3>\n<ul>\n<li>Zcash's proof of work, to the depth you require (§3).</li>\n<li>The deployment input: the checkpoint (a hash and height, plus the times and <code>nBits</code> of the 113 blocks ending with it) and the network parameters. The constructor refuses inconsistent parameters, not wrong ones, so both must be compared with a node or an explorer.</li>\n<li>Someone feeding it (liveness only).</li>\n<li>Base's clock, for the 2-hour rule. The OP Stack keeps an L2 timestamp within 30 minutes of its L1 origin, so a skewed clock can delay a header or admit one slightly early, never one without the work.</li>\n</ul>\n<h2>3. Finality: require work, never a block count</h2>\n<p>Zcash Testnet's minimum-difficulty rule lets anyone mine a block at difficulty 1 when its timestamp is more than 450 s after its parent's. Such a block adds 32 units of work; a normal post-NU7 Testnet block adds about 380,000. Miners choose timestamps (within the 2-hour bound), and once the averaging window holds easy blocks the following ones stay easy too: in a simulation, 300 extra confirmations cost 0.085 of one honest block's work. So the relay exposes <code>confirmationWork(h)</code>, the cumulative work on top of <code>h</code> on the best chain, and documents <code>confirmations(h)</code> as a convenience, never a security measure.</p>\n<p>On Mainnet the measure is the same; the numbers differ. Read from the relay: the 100 blocks up to 3,535,181 (before NU7) added about 2.59 × 10¹² work per block; the 100 blocks up to 3,548,810 (after NU7) about 8.1 × 10¹¹ per block, in 2,683 s. A single Equihash ASIC outpaces all of Testnet's miners, so a Testnet relay secures nothing. On Mainnet an application must require enough work that renting the hashrate to mine it in private, from a fork point below the anchor, costs more than everything its open obligations hold together.</p>\n<h2>4. Measurements</h2>\n<p>Gas, with <code>forge test --isolate</code> (every submission its own transaction, cold storage), solc 0.8.28, 200 optimizer runs:</p>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th></th>\n<th>gas</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td><code>submitHeader</code>, whole transaction, Testnet after NU7 (102-block window), 32 real headers</td>\n<td>min 613,810 · mean 625,703 · max 664,744</td>\n</tr>\n<tr>\n<td>the same, Mainnet before NU7 (17-block window)</td>\n<td>mean 579,490</td>\n</tr>\n<tr>\n<td>execution of one typical header</td>\n<td>576,543</td>\n</tr>\n<tr>\n<td>↳ Equihash: 512 index decodes and 513 BLAKE2b compressions (274,120), tree check (82,843)</td>\n<td>361,100</td>\n</tr>\n<tr>\n<td>↳ time rules and difficulty: mean target over 102 blocks (56,766, mostly 13 cold reads), two medians (≈ 15,400)</td>\n<td>≈ 76,500</td>\n</tr>\n<tr>\n<td>↳ storage (a 4-slot record, the best-chain index, the tip) and events</td>\n<td>≈ 134,000</td>\n</tr>\n<tr>\n<td>deployment, with the 113 context entries and 12 parameters</td>\n<td>3,253,717</td>\n</tr>\n</tbody>\n</table>\n<p>Feeding Seam's relays on Base Sepolia (receipts of 29 October 2026, gas price 0.005 to 0.006 gwei; the L1 data fee was under 0.01 % of each fee):</p>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th></th>\n<th>headers</th>\n<th>gas per header</th>\n<th>ETH per header</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>Testnet, catching up, batches of 8</td>\n<td>557 in 70 txs</td>\n<td>604,805</td>\n<td>0.00000341</td>\n</tr>\n<tr>\n<td>Testnet, following the tip</td>\n<td>15 in 4 txs</td>\n<td>600,388</td>\n<td>0.00000335</td>\n</tr>\n<tr>\n<td>Mainnet before NU7, catching up</td>\n<td>315 in 40 txs</td>\n<td>578,105</td>\n<td>0.00000321</td>\n</tr>\n</tbody>\n</table>\n<p>At 25-second blocks that is 3,456 headers and ≈ 0.012 ETH a day; priced on a Base mainnet fork at a 0.005 gwei base fee, ≈ 0.010 ETH a day.</p>\n<p><strong>Validation against real data.</strong> A Python port of the rules reproduces <code>nBits</code> and passes the time rules for all 23,400 Testnet headers from 4,464,800 to 4,488,199 (225 before NU7, 23,174 after); every one also passes Equihash and PoW. Changing the window to 17, the spacing to 75 s, the activation height by one block, the damping, its rounding, or the order of division and multiplication each breaks real blocks. On Mainnet, 1,600 consecutive headers (3,497,446 .. 3,499,045), linked by SHA-256d to hashes in Zebra's checkpoint list, pass with Mainnet parameters, and the 12,706 headers from Zebra's last checkpoint up to the relay's checkpoint were checked before deployment. The Solidity Equihash verifier agrees with the <code>equihash</code> crate Zebra calls on 592 labelled cases. The 80 relay tests run on real headers; synthetic headers appear only in tests, with genuine Equihash solutions found at Testnet's minimum difficulty.</p>\n<p><strong>NU7 on Mainnet.</strong> The Mainnet relay was deployed on 29 October from checkpoint 3,534,866, with NU7 at 3,543,405 (ZIP 259). It accepted the activation block (header time 2026-11-06 02:34 UTC; <code>nBits</code> went from <code>0x1b675f5f</code> to <code>0x1c009054</code> as the window and the spacing switched) and the 5,405 headers after it, with no redeploy.</p>\n<h2>5. Proving a shielded payment against the relay</h2>\n<h3>5.1 The statement</h3>\n<p>A RISC Zero guest accepts a private witness only if:</p>\n<ol>\n<li><strong>Epoch.</strong> The transaction's consensus branch id is one the build allows. The network is a build parameter, so each network has its own guest and image id.</li>\n<li><strong>Shape.</strong> A v6 transaction that touches only the Ironwood pool (NU6.3): no transparent part, no Sapling, no Orchard-pool action.</li>\n<li><strong>Inclusion.</strong> The txid reaches block B's <code>hashMerkleRoot</code>. B's ZIP 221 history leaf, through its path and the peaks, together with the auth data root of a later header T, reaches T's <code>hashBlockCommitments</code> (ZIP 244). T is the <strong>anchor</strong> and must be a header the relay holds.</li>\n<li><strong>The note.</strong> The witness's opening (receiver, value, rseed) rebuilds the note, and the action's ciphertext decrypts to exactly that note, so the receiver's wallet finds it and can spend it.</li>\n<li><strong>The memo</strong> starts with <code>seam1:</code> and 64 hex digits: the app's <code>paymentRef</code>.</li>\n<li><strong>The receiver</strong> matches <code>receiverCommitment = keccak256(salt32 ‖ receiver43)</code>.</li>\n</ol>\n<p>The guest commits a 192-byte journal: <code>(version, branchId, anchor, paymentRef, receiverCommitment, zatoshi)</code>. The verifier on Base checks the Groth16 seal through RISC Zero's router for a pinned image id and selector, checks that the anchor is on the relay's best chain, and returns the payment and the work on top of the anchor. It is stateless: the application binds each <code>paymentRef</code> to one obligation and settles it once.</p>\n<h3>5.2 What reaches the EVM chain</h3>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th>On chain</th>\n<th>Never on chain</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>the anchor T, a header the relay holds</td>\n<td>the transaction id</td>\n</tr>\n<tr>\n<td><code>paymentRef</code>, chosen by the app</td>\n<td>the payment's block B, one of the blocks between the order and T</td>\n</tr>\n<tr>\n<td><code>receiverCommitment</code></td>\n<td>the note commitment and the nullifier</td>\n</tr>\n<tr>\n<td>the value and the branch id</td>\n<td>the receiver, its address and viewing key, the salt</td>\n</tr>\n</tbody>\n</table>\n<p>The value is public; an application whose amounts must stay private needs a different statement. The salt must be fresh and secret for each payment: a reused salt links payments, and a guessable one lets anyone test candidate receivers against the commitment.</p>\n<h3>5.3 Cost of one real payment (0.01 TAZ on Zcash Testnet, 30 October 2026)</h3>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th>Step</th>\n<th>Measured</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>guest execution</td>\n<td>19,918,817 cycles in 21 segments, 0.9 s</td>\n</tr>\n<tr>\n<td>STARK receipt, RTX 4090</td>\n<td>43.1 s</td>\n</tr>\n<tr>\n<td>Groth16 wrap, same machine</td>\n<td>34.2 s; a 260-byte seal</td>\n</tr>\n<tr>\n<td><code>verify</code> on a Base Sepolia fork, with the Groth16 check</td>\n<td>256,720 gas</td>\n</tr>\n<tr>\n<td>machine cost of the proof (rented at $0.52 an hour)</td>\n<td>≈ $0.01</td>\n</tr>\n</tbody>\n</table>\n<p>A CPU is not an option yet: a proof of the same size ran for 7 h 58 min on a 4-core server. A live verifier on Base Sepolia (<a href=\"https://sepolia.basescan.org/address/0x1701e16350A3F0E29DC45E75F356eAc9dAB8d5f9#code\" rel=\"noopener noreferrer\"><code>0x1701…d5f9</code></a>) returns this payment's journal to anyone who calls it.</p>\n<h3>5.4 What you trust, and the bound that matters</h3>\n<p>RISC Zero's proof system and its Groth16 setup; the governance of RISC Zero's verifier router (it can stop a verifier but not swap the one behind a selector: a liveness risk, not a safety risk); the pinned image id, which anyone can rebuild in RISC Zero's Docker builder; pre-release Zcash crates and a patched <code>pasta_curves</code> compiled only for the zkVM.</p>\n<p>The bound that matters is economic. The statement checks inclusion and the note, not Zcash's Halo 2 proofs or signatures: those were Zcash consensus's job when the block was mined into the chain the relay follows. A chain an attacker mines in private can carry any transaction, so the work an application requires on top of an anchor must outweigh the value of all its open payments together. One deep enough reorganisation could fake a payment for each of them.</p>\n<h3>5.5 Privacy beyond the chain</h3>\n<p>The anchor reveals a header, so the payment is known to sit in some block after the order and before T. To keep that set large: fix the anchor height first, pay after a random delay, and keep payment and anchor in one epoch (the ZIP 221 tree restarts at every network upgrade). Building the witness asks a light wallet server for the transaction by its id, so that server learns what is being proven unless the prover runs its own or reaches one over Tor. The CLI refuses to hand a witness to a remote prover.</p>\n<h2>6. Limitations</h2>\n<ul>\n<li>Testnets only; unaudited.</li>\n<li>The checkpoint and the network parameters are trusted deployment input.</li>\n<li>Liveness depends on someone feeding the relay.</li>\n<li>One real Testnet payment has been proven so far. The Mainnet guest is pinned but has proven no real Mainnet payment.</li>\n<li>Today only the receiver (with its viewing key), or a payer who paid with the <code>seam</code> CLI, can prove: most wallets don't export a note's opening, and recovery with the payer's outgoing viewing key is not implemented yet.</li>\n<li>Proving needs a GPU.</li>\n</ul>\n<h2>7. Related work</h2>\n<p>BTC Relay (2016) established on-chain SPV relays on Ethereum. EIP-152's motivation was a Zcash relay of the same kind, and Consensys' Project Alchemy implemented BLAKE2b and Equihash in Solidity towards it. \"Bridging Sapling: Private Cross-Chain Transfers\" (arXiv:2204.10611) studies private transfers between Zcash and other chains. ZIP 221 commits to chain history for FlyClient-style light clients, and \"Catching the Fly\" (arXiv:2604.26736) discusses what it takes to make FlyClient practical.</p>\n<h2>8. Open questions</h2>\n<ol>\n<li><strong>Skipping headers.</strong> ZIP 221's history tree was designed for FlyClient. Could a relay accept a sampled proof over many headers instead of every header, and which sampling and work parameters are safe when an L2 contract is the verifier?</li>\n<li><strong>Per-header checks or zkVM batches.</strong> At ~2.2 × 10⁹ gas a day, where is the break-even with proving batches of headers off-chain and verifying one proof?</li>\n<li><strong>Sizing the required work.</strong> Equihash hashrate can be rented. Is there a principled way to set the work an application requires against its total open obligations, and should the relay or the application enforce it?</li>\n<li><strong>Standards.</strong> Is a common reader interface for PoW-chain relays on EVM chains worth an ERC? Should the payment memo format and statement become a ZIP?</li>\n</ol>\n<p>Feedback is very welcome, especially on the consensus checks, the reorganisation handling and the economic bound in §5.4.</p>\n<p><strong>Links</strong></p>\n<ul>\n<li>Repository and README: https://github.com/Himess/seam</li>\n<li>Relay design, every rule's source and the gas table: <code>contracts/src/relay/README.md</code></li>\n<li>Payment proofs: <code>docs/PAYMENTS.md</code>; integrating: <code>docs/INTEGRATING.md</code>; feeding: <code>docs/RELAYING.md</code></li>\n<li>Relays on Base Sepolia: Testnet <a href=\"https://sepolia.basescan.org/address/0x77ceDADCFf8bE399C67AB579Ad739820FaC5cE0c#code\" rel=\"noopener noreferrer\"><code>0x77ce…cE0c</code></a>, Mainnet <a href=\"https://sepolia.basescan.org/address/0x527B6347d2392d17fa5Bd13DF88A43676501BE48#code\" rel=\"noopener noreferrer\"><code>0x527B…BE48</code></a></li>\n</ul>\n<p><em>Disclosure: I designed Seam and built it with AI coding assistants. Every number above links to a test, a file or a transaction in the repository.</em></p>\n<p>原文链接：<a href=\"https://ethresear.ch/t/seam-verifying-zcash-headers-on-base-with-eip-152-and-proving-shielded-payments-without-linking-the-chains/26239\">https://ethresear.ch/t/seam-verifying-zcash-headers-on-base-with-eip-152-and-proving-shielded-payments-without-linking-the-chains/26239</a></p>\n<p>相关链接：<a href=\"https://github.com/Himess/seam\">https://github.com/Himess/seam</a></p>"}, "rewrite": {"title": "Seam：用 EIP-152 在 Base 上逐个验证 Zcash 区块头，并证明屏蔽支付而不关联两条链", "markdown": "## 摘要\n\n* Base 上的一份合约按 Zcash 的共识规则校验每一个 Zcash 区块头：Equihash (200, 9) 解跑在 EIP-152 的 BLAKE2b 预编译上，难度调整（包括 NU7 的 25 秒区块）、时间规则和累计工作量也一并核验。合约由此能在不信任桥、委员会或任何中继者的前提下读取 Zcash 的最佳链。任何人都可以喂区块头；喂头者可以延迟中继，但无法让合约接受一个被 Zcash 规则拒绝的区块头。\n* 校验一个区块头约需 626k gas（均值，按整笔交易计）；其中 Equihash 占 361k。以 25 秒出块跟随 Zcash，一天约 3,456 个区块头，约 2.2 × 10⁹ gas：按 Base 的 0.005 gwei 计，每天约 0.01 ETH。\n* 一份 2026 年 10 月 29 日以主网参数部署的中继，在无需重新部署的情况下跨过了 Zcash 主网的 NU7 激活（高度 3,543,405，2026 年 11 月 6 日），并跟上了其后的 5,405 个区块头。\n* 在中继之上还有一层：一份 RISC Zero 证明（经 Groth16 包装，在 Base 上验证需 256,720 gas），证明一笔金额至少达到某个数额的屏蔽支付，付给了应用预先承诺的接收方，附有写明应用引用的 memo，且这笔交易位于中继所持某个区块头的 ZIP 221 链历史之内。交易 id、note、区块和地址都不会到达 EVM 链。一笔真实的测试网支付在一台租用的 RTX 4090 上 81 秒完成证明，成本约一美分。\n* 仅部署在测试网，未经审计。代码（MIT 许可）、真实区块头测试集，以及文中每个数字的来源：https://github.com/Himess/seam\n\n## 1. 为什么做这件事\n\n如今在 EVM 应用里使用 ZEC，意味着信任某个为 Zcash 上发生的事情作证的角色：桥委员会、多签或托管方。另一种做法由来已久。BTC Relay 在 2016 年把比特币的 SPV 客户端放上以太坊，让合约可以信任工作量证明，而不是信任人。对 Zcash 来说，这条路一直被 Equihash 挡住：验证一个解需要 512 次 BLAKE2b 哈希，用普通 Solidity 写代价高得无法承受。EIP-152 写明的动机正是这一点：这条 BLAKE2b 压缩预编译在 2019 年的伊斯坦布尔升级中加入以太坊，目的就是做一个 BTC Relay 式的 Zcash SPV 客户端。\n\n现在有两件事让它变得可行。其一，L2 把逐区块头验证的成本压低到足以跟上每一个区块（见 §4）。其二，zkVM 让证明区块内容中的某个事实、同时不泄露该内容成为可能。这一点对 Zcash 比对任何其他链都重要：从某个 EVM 账户提交一笔屏蔽支付 txid 的 Merkle 证明，会把两条链关联起来，付款人花钱买来的隐私就此作废。\n\n### 2.1 每个区块头必须通过的检查\n\n规则遵循 Zebra（v7.0.0-rc.0）和各 ZIP 的定义；每一条都在代码中注明了出处。\n\n1. **格式与衔接**。区块头总长 1,487 字节（140 字节前缀、compactSize(1344)、solution），版本号 ≥ 4，父区块必须已知，且该区块此前未被记录过。\n2. **时间**。时间戳必须晚于此前 11 个区块时间戳的中位数；最多比该中位数晚 90 分钟；最多比 Base 的 `block.timestamp` 超前 2 小时（沿用 Zebra 的本地时钟规则，只是把节点的时钟换成了 L2 的时钟）。\n3. **难度。**`nBits` 必须等于难度调整所要求的值：调整基于平均窗口内的目标值均值，阻尼因子为 4，调整上下界为 +16% / −32%，时间戳中位数取 11 个，目标值以 PoW 极限封顶。平均窗口在 NU7 之前是 75 秒间隔下的 17 个区块，自 NU7 起是 25 秒间隔下的 102 个区块（ZIP 218、ZIP 259），切换高度在部署时固定。测试网的最小难度规则（父区块之后超过 450 秒才出的区块必须携带 `0x2007ffff`）是一个参数，在网络 id 为主网时会被拒绝。\n4. **Equihash (200, 9)**。验证逻辑与 librustzcash 的验证器一致：使用 personalization 为 `ZcashPoW` 的 BLAKE2b-400；512 个 21 位索引；9 层中每一层都要满足 20 位碰撞；索引需满足顺序要求、彼此互异；最终根必须为零。第一个 128 字节的 BLAKE2b 数据块只压缩一次；此后每验证一个索引，只需在预编译合约（0x09）上做一次末块压缩。\n5. **工作量证明**。对区块头做 SHA-256d，按小端序读取，结果不得超过目标值。\n6. **分叉选择**。只有当累计工作量严格更大时，区块才能成为链头（tip），工作量按 `work = 2^256 / (target + 1)` 计算；持平时保留先看到的那一个。任意深度的链重组都会被跟随（Zebra 本身会拒绝 1,000 个区块以下的重组）。\n\n不检查的部分：区块内容。`hashMerkleRoot` 与 `hashBlockCommitments` 会随工作量证明一并存储，因为 PoW 本身就承诺了这两个字段；要陈述区块内容的任何事实，还需要包含证明（§5）。\n\n### 2.2 喂头、链重组，以及喂头者能做什么\n\n`submitHeaders` 没有权限限制，并且会跳过中继已经持有的区块头，因此抢着提交的喂头者只会浪费 gas，不会破坏任何东西。参考喂头者通过 Zcash 的 P2P 协议获取区块头，用中继当前最优链的 block locator 跟随链重组，然后分批提交。每批 4 到 8 个区块头最划算：批量 4 时均摊到每个区块头是 597k gas，批量 16 时涨到 645k，因为内存开销随批量增长。\n\n存储设计是由审查中的一个发现决定的。如果把每个被孤立高度上的最优链索引都清掉，每清一个高度都要消耗 gas，攻击者就可以在某个旧链顶上构造一条很长但很轻的分叉，把一次诚实的重组推过单笔交易的 gas 上限，让中继卡死。现在中继只重写新分叉上的条目，把高于新链顶的高度留作陈旧条目，所有视图都会忽略这些条目（所有读取都以链顶高度为界）。重组的成本从此不再取决于被孤立的分叉。\n\n**喂头者可以扣住区块头不发（制造延迟），但无法伪造区块头。** 如果一个应用的用户要依赖中继等待数据（例如存在截止时间，或有一笔尚未完成的结算），这个应用就应该自己运行一个喂头者，或者至少持续观察一个。\n\n### 2.3 你要信任什么\n\n* Zcash 的工作量证明，信任到你所要求的深度（见 §3）。\n* 部署输入：检查点（一个哈希和高度，加上以它收尾的 113 个区块的时间戳和 `nBits`）和网络参数。构造函数会拒绝互相矛盾的参数，但识别不了错误的参数，所以这两项都必须与节点或区块浏览器比对。\n* 有人给它喂区块头（只涉及活性）。\n* Base 的时钟，2 小时规则依赖它。OP Stack 保证 L2 时间戳与其 L1 origin 相差不超过 30 分钟，因此时钟偏差最多让一个区块头晚一点被接受，或者稍微提前一点被接受，**绝不会让一个没有工作量证明的区块头被接受**。\n\n## 3. 最终性：看工作量，不看区块数量\n\nZcash 测试网有一条最低难度规则：只要新区块的时间戳比父区块晚超过 450 秒，任何人都能以难度 1 挖出一个区块。这种区块给链增加 32 个单位的工作量，而 NU7 之后测试网的一个正常区块大约增加 380,000。\n\n时间戳由矿工自行选择（在 2 小时上限之内），而一旦难度平均值窗口里容纳了这些容易的区块，后续区块也会继续容易下去：在一次模拟中，额外 300 个确认只花了 0.085 个诚实区块的工作量。\n\n所以中继暴露的接口是 `confirmationWork(h)`，即最佳链上 `h` 之上累计的工作量；至于 `confirmations(h)`，文档把它标注为便利功能，**绝不作为安全度量**。\n\n主网的度量方式相同，数字不同。从中继上读到的数据：截至区块 3,535,181 的 100 个区块（NU7 之前）平均每个区块贡献约 2.59 × 10¹² 的工作量；截至区块 3,548,810 的 100 个区块（NU7 之后）平均每个区块约 8.1 × 10¹¹，这 100 个区块用时 2,683 秒。\n\n一台 Equihash ASIC 的算力就能超过测试网全体矿工的总和，**架在测试网上的中继提供不了任何安全保障**。在主网上，应用必须要求足够高的工作量，使得私下租用算力、从锚点下方的分叉点开始把这么多工作量挖出来的成本，高于其全部未结义务加在一起的价值。\n\n## 4. 实测数据\n\nGas 用 `forge test --isolate` 测量（每次提交都是一笔独立交易，存储读取为冷状态），solc 0.8.28，优化器运行 200 次：\n\n|  | gas |\n|----|----|\n| `submitHeader` 整笔交易，Testnet NU7 之后（102 区块窗口），32 个真实区块头 | 最小 613,810 · 平均 625,703 · 最大 664,744 |\n| 同上，Mainnet NU7 之前（17 区块窗口） | 平均 579,490 |\n| 单个典型区块头的执行 | 576,543 |\n| ↳ Equihash：512 次索引解码与 513 次 BLAKE2b 压缩（274,120），树检查（82,843） | 361,100 |\n| ↳ 时间规则与难度：102 个区块的平均目标值（56,766，主要来自 13 次冷读取），两个中位数（≈ 15,400） | ≈ 76,500 |\n| ↳ 存储（一条 4 插槽记录、最优链索引、链尖）与事件 | ≈ 134,000 |\n| 部署，含 113 条上下文条目和 12 个参数 | 3,253,717 |\n\n在 Base Sepolia 上给 Seam 的中继喂区块头的开销（2026 年 10 月 29 日的交易回执，gas 价格 0.005 到 0.006 gwei；L1 数据费不到每笔费用的 0.01 %）：\n\n|  | 区块头数 | 每个区块头的 gas | 每个区块头的 ETH |\n|----|----|----|----|\n| Testnet，追赶，每批 8 个 | 70 笔交易 557 个 | 604,805 | 0.00000341 |\n| Testnet，跟随链尖 | 4 笔交易 15 个 | 600,388 | 0.00000335 |\n| Mainnet NU7 之前，追赶 | 40 笔交易 315 个 | 578,105 | 0.00000321 |\n\n按 25 秒出块计算，一天为 3,456 个区块头，约 0.012 ETH；若按 Base 主网分叉上 0.005 gwei 的 base fee 计价，约每天 0.010 ETH。\n\n**用真实数据验证。** 一套用 Python 移植的规则复现了 `nBits`，并通过了从 4,464,800 到 4,488,199 共 23,400 个 Testnet 区块头的时间规则（NU7 之前 225 个，之后 23,174 个）；每一个区块头也都通过 Equihash 和 PoW 检查。把窗口改成 17、把间隔改成 75 秒、激活高度偏移一个区块、改动阻尼系数或其舍入方式、或调换除法与乘法的顺序，任何一项都会使真实区块验证失败。\n\n在 Mainnet 上，1,600 个连续区块头（3,497,446 到 3,499,045）通过 SHA-256d 链接到 Zebra 检查点列表中的哈希，用 Mainnet 参数全部通过验证；从 Zebra 最后一个检查点到中继检查点之间的 12,706 个区块头，在部署之前已经核对过。Solidity 版 Equihash 验证器与 Zebra 调用的 `equihash` crate 在 592 个带标注用例上结果一致。80 项中继测试运行在真实区块头上；合成区块头只出现在测试里，其 Equihash 解是在 Testnet 最低难度下真实求得的。\n\n**Mainnet 上的 NU7。** Mainnet 中继于 10 月 29 日从检查点 3,534,866 部署，NU7 激活高度为 3,543,405（ZIP 259）。它接受了激活区块（区块头时间 2026-11-06 02:34 UTC；随着窗口与间隔切换，`nBits` 从 `0x1b675f5f` 变为 `0x1c009054`）及其后的 5,405 个区块头，全程没有重新部署。\n\n## 5. 以中继为基准证明一笔屏蔽支付\n\n### 5.1 待证陈述\n\nRISC Zero guest 只有在满足以下全部条件时，才接受一份私有 witness：\n\n1. **Epoch（共识分支）**：交易的 consensus branch id 是该构建允许的分支 id 之一。网络是一个构建参数，因此每个网络都有各自的 guest 和 image id。\n2. **Shape（形态）**：这是一笔 v6 交易，只触及 Ironwood 池（NU6.3），没有透明部分，没有 Sapling，也没有 Orchard 池的 action。\n3. **Inclusion（包含性）**：txid 能够通向区块 B 的 `hashMerkleRoot`。B 的 ZIP 221 history leaf 经由自身路径（path）和 peaks，连同更晚区块头 T 的 auth data root，最终通向 T 的 `hashBlockCommitments`（ZIP 244）。T 是**锚点（anchor）**，必须是中继持有的一个区块头。\n4. **note**：witness 的开启信息（receiver、value、rseed）能够重建出这笔 note，且 action 的密文解密后恰好得到它，这样接收方的钱包才能发现这笔支付并可以花费。\n5. **memo**：以 `seam1:` 开头，后接 64 个十六进制字符，这就是应用的 `paymentRef`。\n6. **接收方**：满足 `receiverCommitment = keccak256(salt32 ‖ receiver43)`。\n\nguest 提交一份 192 字节的 journal：`(version, branchId, anchor, paymentRef, receiverCommitment, zatoshi)`。Base 上的验证器通过 RISC Zero 的 router，按预先固定的 image id 和 selector 校验 Groth16 seal；再校验锚点确实位于中继的最佳链上；然后返回这笔支付，以及锚点之上累积的工作量（work）。验证器是无状态的：应用把每个 `paymentRef` 绑定到一笔 obligation（义务）上，并且只结算一次。\n\n### 5.2 哪些信息会进入 EVM 链\n\n| 上链 | 永不上链 |\n|----|----|\n| 锚点 T，中继持有的一个区块头 | 交易 id |\n| `paymentRef`，由应用选定 | 支付所在区块 B，即订单（order）与 T 之间的某个区块 |\n| `receiverCommitment` | note commitment 与 nullifier |\n| 支付金额与 branch id | 接收方及其地址、viewing key、salt |\n\n金额是公开的；若应用要求金额保密，就需要另写一份陈述（statement）。salt 必须对每笔支付都保持新鲜且保密：复用的 salt 会把多笔支付关联起来，可猜测的 salt 则让任何人都能用候选接收方去比对 commitment。\n\n### 5.3 一笔真实支付的成本（Zcash 测试网，0.01 TAZ，2026 年 10 月 30 日）\n\n| 步骤 | 实测值 |\n|----|----|\n| guest 执行 | 19,918,817 个周期，分 21 个 segment，0.9 秒 |\n| STARK 回执，RTX 4090 | 43.1 秒 |\n| Groth16 包装，同一台机器 | 34.2 秒；产出 260 字节的 seal |\n| 在 Base Sepolia 分叉上调用 `verify`（含 Groth16 校验） | 256,720 gas |\n| 证明的机器成本（按每小时 $0.52 租用） | ≈ $0.01 |\n\nCPU 目前还走不通：同样规模的证明在一台 4 核服务器上跑了 7 小时 58 分钟。Base Sepolia 上有一个正在运行的 verifier（[`0x1701…d5f9`](https://sepolia.basescan.org/address/0x1701e16350A3F0E29DC45E75F356eAc9dAB8d5f9#code)），任何人调用它，都能取回这笔支付的 journal。\n\n### 5.4 需要信任什么，以及真正要紧的边界\n\n需要信任的清单包括：RISC Zero 的证明系统及其 Groth16 setup；RISC Zero verifier router 的治理（它可以停用一个 verifier，但换不掉 selector 背后那一个：这属于活性风险，安全性不受影响）；固定下来的 image id，任何人都能在 RISC Zero 的 Docker builder 里重新构建出它；以及预发布版本的 Zcash crates，还有打过补丁、只为 zkVM 编译的 `pasta_curves`。\n\n真正要紧的边界是经济层面的。声明校验的是包含关系和 note；Zcash 的 Halo 2 证明和签名不在其中，后者的验证本来就是 Zcash 共识在区块被挖进中继所跟随那条链时的职责。攻击者私自挖出的链可以装进任意交易，所以**应用在 anchor 之上要求的工作量，必须超过其所有未完成支付加在一起的价值**。一次足够深的重组，就能给其中每一笔各伪造出一笔支付。\n\n### 5.5 链之外的隐私\n\nanchor 会暴露一个区块头，所以外界知道的是，这笔支付落在订单之后、T 之前的某个区块里。要让这个候选集合保持得足够大：先固定 anchor 高度，在一段随机延迟之后再付款，并且让支付和 anchor 处于同一个 epoch 里（ZIP 221 树在每次网络升级时都会重新开始）。\n\n构建 witness 时，需要按交易 id 向一台轻钱包服务器请求这笔交易，因此该服务器会知道正在证明的是什么，除非证明者自己运行一台，或者通过 Tor 连到一台。CLI 拒绝把 witness 交给远程证明者。\n\n## 6. 局限\n\n* 仅限测试网，且未经审计。\n* 检查点和网络参数是需要信任的部署输入。\n* 活性取决于是否有人持续向中继提供数据。\n* 到目前为止，只有一笔真实的测试网支付完成了证明。主网 guest 已经固定（pinned），但尚未证明任何一笔真实的主网支付。\n* 如今能生成证明的只有持有 viewing key 的收款方，或者用 `seam` CLI 完成支付的付款方：大多数钱包不导出 note 的 opening，而借助付款方 outgoing viewing key 做恢复也尚未实现。\n* 生成证明需要 GPU。\n\n## 7. 相关工作\n\nBTC Relay（2016）在以太坊上确立了链上 SPV 中继的做法。EIP-152 的立项动机正是实现同类的 Zcash 中继，Consensys 的 Project Alchemy 为此用 Solidity 实现了 BLAKE2b 和 Equihash。《Bridging Sapling: Private Cross-Chain Transfers》（arXiv:2204.10611）研究了 Zcash 与其他链之间的隐私转账。ZIP 221 为 FlyClient 式轻客户端引入了链历史承诺，《Catching the Fly》（arXiv:2604.26736）则讨论了让 FlyClient 真正走向实用需要哪些条件。\n\n## 8. 开放问题\n\n1. **跳过区块头。** ZIP 221 的历史树当初是为 FlyClient 设计的。中继能否接受一份覆盖大量区块头的抽样证明，而不是逐个验证每个区块头？当验证方是 L2 合约时，哪些抽样参数和工作量参数才是安全的？\n2. **逐头检查还是 zkVM 批量证明。** 按每天约 2.2 × 10⁹ gas 计算，与在链下对成批区块头生成证明、链上只验证一份证明相比，盈亏平衡点在哪里？\n3. **给所需工作量定规模。** Equihash 算力是可以租用的。有没有一种有原则可循的方法，把应用要求的工作量与其未结义务总额挂钩来设定？这项约束应该由中继强制执行，还是由应用自己执行？\n4. **标准化。** 为 EVM 链上的 PoW 链中继设计一个统一的读取接口，值不值得做成一个 ERC？支付备忘录（memo）格式和证明语句（statement）要不要写成一份 ZIP？\n\n非常欢迎反馈，尤其是共识检查、重组处理和第 5.4 节的经济约束这几个部分。\n\n**链接**\n\n- 仓库与 README：https://github.com/Himess/seam\n- 中继设计、每条规则的源码出处和 gas 表：`contracts/src/relay/README.md`\n- 支付证明：`docs/PAYMENTS.md`；接入方式：`docs/INTEGRATING.md`；喂送数据：`docs/RELAYING.md`\n- Base Sepolia 上的中继：测试网 [`0x77ce…cE0c`](https://sepolia.basescan.org/address/0x77ceDADCFf8bE399C67AB579Ad739820FaC5cE0c#code)，主网 [`0x527B…BE48`](https://sepolia.basescan.org/address/0x527B6347d2392d17fa5Bd13DF88A43676501BE48#code)\n\n*披露：Seam 由本文作者设计，并借助 AI 编程助手构建。上文中的每个数字都链接到仓库里的某个测试、文件或交易。*", "html": "<h2>摘要</h2>\n<ul>\n<li>Base 上的一份合约按 Zcash 的共识规则校验每一个 Zcash 区块头：Equihash (200, 9) 解跑在 EIP-152 的 BLAKE2b 预编译上，难度调整（包括 NU7 的 25 秒区块）、时间规则和累计工作量也一并核验。合约由此能在不信任桥、委员会或任何中继者的前提下读取 Zcash 的最佳链。任何人都可以喂区块头；喂头者可以延迟中继，但无法让合约接受一个被 Zcash 规则拒绝的区块头。</li>\n<li>校验一个区块头约需 626k gas（均值，按整笔交易计）；其中 Equihash 占 361k。以 25 秒出块跟随 Zcash，一天约 3,456 个区块头，约 2.2 × 10⁹ gas：按 Base 的 0.005 gwei 计，每天约 0.01 ETH。</li>\n<li>一份 2026 年 10 月 29 日以主网参数部署的中继，在无需重新部署的情况下跨过了 Zcash 主网的 NU7 激活（高度 3,543,405，2026 年 11 月 6 日），并跟上了其后的 5,405 个区块头。</li>\n<li>在中继之上还有一层：一份 RISC Zero 证明（经 Groth16 包装，在 Base 上验证需 256,720 gas），证明一笔金额至少达到某个数额的屏蔽支付，付给了应用预先承诺的接收方，附有写明应用引用的 memo，且这笔交易位于中继所持某个区块头的 ZIP 221 链历史之内。交易 id、note、区块和地址都不会到达 EVM 链。一笔真实的测试网支付在一台租用的 RTX 4090 上 81 秒完成证明，成本约一美分。</li>\n<li>仅部署在测试网，未经审计。代码（MIT 许可）、真实区块头测试集，以及文中每个数字的来源：https://github.com/Himess/seam</li>\n</ul>\n<h2>1. 为什么做这件事</h2>\n<p>如今在 EVM 应用里使用 ZEC，意味着信任某个为 Zcash 上发生的事情作证的角色：桥委员会、多签或托管方。另一种做法由来已久。BTC Relay 在 2016 年把比特币的 SPV 客户端放上以太坊，让合约可以信任工作量证明，而不是信任人。对 Zcash 来说，这条路一直被 Equihash 挡住：验证一个解需要 512 次 BLAKE2b 哈希，用普通 Solidity 写代价高得无法承受。EIP-152 写明的动机正是这一点：这条 BLAKE2b 压缩预编译在 2019 年的伊斯坦布尔升级中加入以太坊，目的就是做一个 BTC Relay 式的 Zcash SPV 客户端。</p>\n<p>现在有两件事让它变得可行。其一，L2 把逐区块头验证的成本压低到足以跟上每一个区块（见 §4）。其二，zkVM 让证明区块内容中的某个事实、同时不泄露该内容成为可能。这一点对 Zcash 比对任何其他链都重要：从某个 EVM 账户提交一笔屏蔽支付 txid 的 Merkle 证明，会把两条链关联起来，付款人花钱买来的隐私就此作废。</p>\n<h3>2.1 每个区块头必须通过的检查</h3>\n<p>规则遵循 Zebra（v7.0.0-rc.0）和各 ZIP 的定义；每一条都在代码中注明了出处。</p>\n<ol>\n<li><strong>格式与衔接</strong>。区块头总长 1,487 字节（140 字节前缀、compactSize(1344)、solution），版本号 ≥ 4，父区块必须已知，且该区块此前未被记录过。</li>\n<li><strong>时间</strong>。时间戳必须晚于此前 11 个区块时间戳的中位数；最多比该中位数晚 90 分钟；最多比 Base 的 <code>block.timestamp</code> 超前 2 小时（沿用 Zebra 的本地时钟规则，只是把节点的时钟换成了 L2 的时钟）。</li>\n<li><strong>难度。</strong><code>nBits</code> 必须等于难度调整所要求的值：调整基于平均窗口内的目标值均值，阻尼因子为 4，调整上下界为 +16% / −32%，时间戳中位数取 11 个，目标值以 PoW 极限封顶。平均窗口在 NU7 之前是 75 秒间隔下的 17 个区块，自 NU7 起是 25 秒间隔下的 102 个区块（ZIP 218、ZIP 259），切换高度在部署时固定。测试网的最小难度规则（父区块之后超过 450 秒才出的区块必须携带 <code>0x2007ffff</code>）是一个参数，在网络 id 为主网时会被拒绝。</li>\n<li><strong>Equihash (200, 9)</strong>。验证逻辑与 librustzcash 的验证器一致：使用 personalization 为 <code>ZcashPoW</code> 的 BLAKE2b-400；512 个 21 位索引；9 层中每一层都要满足 20 位碰撞；索引需满足顺序要求、彼此互异；最终根必须为零。第一个 128 字节的 BLAKE2b 数据块只压缩一次；此后每验证一个索引，只需在预编译合约（0x09）上做一次末块压缩。</li>\n<li><strong>工作量证明</strong>。对区块头做 SHA-256d，按小端序读取，结果不得超过目标值。</li>\n<li><strong>分叉选择</strong>。只有当累计工作量严格更大时，区块才能成为链头（tip），工作量按 <code>work = 2^256 / (target + 1)</code> 计算；持平时保留先看到的那一个。任意深度的链重组都会被跟随（Zebra 本身会拒绝 1,000 个区块以下的重组）。</li>\n</ol>\n<p>不检查的部分：区块内容。<code>hashMerkleRoot</code> 与 <code>hashBlockCommitments</code> 会随工作量证明一并存储，因为 PoW 本身就承诺了这两个字段；要陈述区块内容的任何事实，还需要包含证明（§5）。</p>\n<h3>2.2 喂头、链重组，以及喂头者能做什么</h3>\n<p><code>submitHeaders</code> 没有权限限制，并且会跳过中继已经持有的区块头，因此抢着提交的喂头者只会浪费 gas，不会破坏任何东西。参考喂头者通过 Zcash 的 P2P 协议获取区块头，用中继当前最优链的 block locator 跟随链重组，然后分批提交。每批 4 到 8 个区块头最划算：批量 4 时均摊到每个区块头是 597k gas，批量 16 时涨到 645k，因为内存开销随批量增长。</p>\n<p>存储设计是由审查中的一个发现决定的。如果把每个被孤立高度上的最优链索引都清掉，每清一个高度都要消耗 gas，攻击者就可以在某个旧链顶上构造一条很长但很轻的分叉，把一次诚实的重组推过单笔交易的 gas 上限，让中继卡死。现在中继只重写新分叉上的条目，把高于新链顶的高度留作陈旧条目，所有视图都会忽略这些条目（所有读取都以链顶高度为界）。重组的成本从此不再取决于被孤立的分叉。</p>\n<p><strong>喂头者可以扣住区块头不发（制造延迟），但无法伪造区块头。</strong> 如果一个应用的用户要依赖中继等待数据（例如存在截止时间，或有一笔尚未完成的结算），这个应用就应该自己运行一个喂头者，或者至少持续观察一个。</p>\n<h3>2.3 你要信任什么</h3>\n<ul>\n<li>Zcash 的工作量证明，信任到你所要求的深度（见 §3）。</li>\n<li>部署输入：检查点（一个哈希和高度，加上以它收尾的 113 个区块的时间戳和 <code>nBits</code>）和网络参数。构造函数会拒绝互相矛盾的参数，但识别不了错误的参数，所以这两项都必须与节点或区块浏览器比对。</li>\n<li>有人给它喂区块头（只涉及活性）。</li>\n<li>Base 的时钟，2 小时规则依赖它。OP Stack 保证 L2 时间戳与其 L1 origin 相差不超过 30 分钟，因此时钟偏差最多让一个区块头晚一点被接受，或者稍微提前一点被接受，<strong>绝不会让一个没有工作量证明的区块头被接受</strong>。</li>\n</ul>\n<h2>3. 最终性：看工作量，不看区块数量</h2>\n<p>Zcash 测试网有一条最低难度规则：只要新区块的时间戳比父区块晚超过 450 秒，任何人都能以难度 1 挖出一个区块。这种区块给链增加 32 个单位的工作量，而 NU7 之后测试网的一个正常区块大约增加 380,000。</p>\n<p>时间戳由矿工自行选择（在 2 小时上限之内），而一旦难度平均值窗口里容纳了这些容易的区块，后续区块也会继续容易下去：在一次模拟中，额外 300 个确认只花了 0.085 个诚实区块的工作量。</p>\n<p>所以中继暴露的接口是 <code>confirmationWork(h)</code>，即最佳链上 <code>h</code> 之上累计的工作量；至于 <code>confirmations(h)</code>，文档把它标注为便利功能，<strong>绝不作为安全度量</strong>。</p>\n<p>主网的度量方式相同，数字不同。从中继上读到的数据：截至区块 3,535,181 的 100 个区块（NU7 之前）平均每个区块贡献约 2.59 × 10¹² 的工作量；截至区块 3,548,810 的 100 个区块（NU7 之后）平均每个区块约 8.1 × 10¹¹，这 100 个区块用时 2,683 秒。</p>\n<p>一台 Equihash ASIC 的算力就能超过测试网全体矿工的总和，<strong>架在测试网上的中继提供不了任何安全保障</strong>。在主网上，应用必须要求足够高的工作量，使得私下租用算力、从锚点下方的分叉点开始把这么多工作量挖出来的成本，高于其全部未结义务加在一起的价值。</p>\n<h2>4. 实测数据</h2>\n<p>Gas 用 <code>forge test --isolate</code> 测量（每次提交都是一笔独立交易，存储读取为冷状态），solc 0.8.28，优化器运行 200 次：</p>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th></th>\n<th>gas</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td><code>submitHeader</code> 整笔交易，Testnet NU7 之后（102 区块窗口），32 个真实区块头</td>\n<td>最小 613,810 · 平均 625,703 · 最大 664,744</td>\n</tr>\n<tr>\n<td>同上，Mainnet NU7 之前（17 区块窗口）</td>\n<td>平均 579,490</td>\n</tr>\n<tr>\n<td>单个典型区块头的执行</td>\n<td>576,543</td>\n</tr>\n<tr>\n<td>↳ Equihash：512 次索引解码与 513 次 BLAKE2b 压缩（274,120），树检查（82,843）</td>\n<td>361,100</td>\n</tr>\n<tr>\n<td>↳ 时间规则与难度：102 个区块的平均目标值（56,766，主要来自 13 次冷读取），两个中位数（≈ 15,400）</td>\n<td>≈ 76,500</td>\n</tr>\n<tr>\n<td>↳ 存储（一条 4 插槽记录、最优链索引、链尖）与事件</td>\n<td>≈ 134,000</td>\n</tr>\n<tr>\n<td>部署，含 113 条上下文条目和 12 个参数</td>\n<td>3,253,717</td>\n</tr>\n</tbody>\n</table>\n<p>在 Base Sepolia 上给 Seam 的中继喂区块头的开销（2026 年 10 月 29 日的交易回执，gas 价格 0.005 到 0.006 gwei；L1 数据费不到每笔费用的 0.01 %）：</p>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th></th>\n<th>区块头数</th>\n<th>每个区块头的 gas</th>\n<th>每个区块头的 ETH</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>Testnet，追赶，每批 8 个</td>\n<td>70 笔交易 557 个</td>\n<td>604,805</td>\n<td>0.00000341</td>\n</tr>\n<tr>\n<td>Testnet，跟随链尖</td>\n<td>4 笔交易 15 个</td>\n<td>600,388</td>\n<td>0.00000335</td>\n</tr>\n<tr>\n<td>Mainnet NU7 之前，追赶</td>\n<td>40 笔交易 315 个</td>\n<td>578,105</td>\n<td>0.00000321</td>\n</tr>\n</tbody>\n</table>\n<p>按 25 秒出块计算，一天为 3,456 个区块头，约 0.012 ETH；若按 Base 主网分叉上 0.005 gwei 的 base fee 计价，约每天 0.010 ETH。</p>\n<p><strong>用真实数据验证。</strong> 一套用 Python 移植的规则复现了 <code>nBits</code>，并通过了从 4,464,800 到 4,488,199 共 23,400 个 Testnet 区块头的时间规则（NU7 之前 225 个，之后 23,174 个）；每一个区块头也都通过 Equihash 和 PoW 检查。把窗口改成 17、把间隔改成 75 秒、激活高度偏移一个区块、改动阻尼系数或其舍入方式、或调换除法与乘法的顺序，任何一项都会使真实区块验证失败。</p>\n<p>在 Mainnet 上，1,600 个连续区块头（3,497,446 到 3,499,045）通过 SHA-256d 链接到 Zebra 检查点列表中的哈希，用 Mainnet 参数全部通过验证；从 Zebra 最后一个检查点到中继检查点之间的 12,706 个区块头，在部署之前已经核对过。Solidity 版 Equihash 验证器与 Zebra 调用的 <code>equihash</code> crate 在 592 个带标注用例上结果一致。80 项中继测试运行在真实区块头上；合成区块头只出现在测试里，其 Equihash 解是在 Testnet 最低难度下真实求得的。</p>\n<p><strong>Mainnet 上的 NU7。</strong> Mainnet 中继于 10 月 29 日从检查点 3,534,866 部署，NU7 激活高度为 3,543,405（ZIP 259）。它接受了激活区块（区块头时间 2026-11-06 02:34 UTC；随着窗口与间隔切换，<code>nBits</code> 从 <code>0x1b675f5f</code> 变为 <code>0x1c009054</code>）及其后的 5,405 个区块头，全程没有重新部署。</p>\n<h2>5. 以中继为基准证明一笔屏蔽支付</h2>\n<h3>5.1 待证陈述</h3>\n<p>RISC Zero guest 只有在满足以下全部条件时，才接受一份私有 witness：</p>\n<ol>\n<li><strong>Epoch（共识分支）</strong>：交易的 consensus branch id 是该构建允许的分支 id 之一。网络是一个构建参数，因此每个网络都有各自的 guest 和 image id。</li>\n<li><strong>Shape（形态）</strong>：这是一笔 v6 交易，只触及 Ironwood 池（NU6.3），没有透明部分，没有 Sapling，也没有 Orchard 池的 action。</li>\n<li><strong>Inclusion（包含性）</strong>：txid 能够通向区块 B 的 <code>hashMerkleRoot</code>。B 的 ZIP 221 history leaf 经由自身路径（path）和 peaks，连同更晚区块头 T 的 auth data root，最终通向 T 的 <code>hashBlockCommitments</code>（ZIP 244）。T 是<strong>锚点（anchor）</strong>，必须是中继持有的一个区块头。</li>\n<li><strong>note</strong>：witness 的开启信息（receiver、value、rseed）能够重建出这笔 note，且 action 的密文解密后恰好得到它，这样接收方的钱包才能发现这笔支付并可以花费。</li>\n<li><strong>memo</strong>：以 <code>seam1:</code> 开头，后接 64 个十六进制字符，这就是应用的 <code>paymentRef</code>。</li>\n<li><strong>接收方</strong>：满足 <code>receiverCommitment = keccak256(salt32 ‖ receiver43)</code>。</li>\n</ol>\n<p>guest 提交一份 192 字节的 journal：<code>(version, branchId, anchor, paymentRef, receiverCommitment, zatoshi)</code>。Base 上的验证器通过 RISC Zero 的 router，按预先固定的 image id 和 selector 校验 Groth16 seal；再校验锚点确实位于中继的最佳链上；然后返回这笔支付，以及锚点之上累积的工作量（work）。验证器是无状态的：应用把每个 <code>paymentRef</code> 绑定到一笔 obligation（义务）上，并且只结算一次。</p>\n<h3>5.2 哪些信息会进入 EVM 链</h3>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th>上链</th>\n<th>永不上链</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>锚点 T，中继持有的一个区块头</td>\n<td>交易 id</td>\n</tr>\n<tr>\n<td><code>paymentRef</code>，由应用选定</td>\n<td>支付所在区块 B，即订单（order）与 T 之间的某个区块</td>\n</tr>\n<tr>\n<td><code>receiverCommitment</code></td>\n<td>note commitment 与 nullifier</td>\n</tr>\n<tr>\n<td>支付金额与 branch id</td>\n<td>接收方及其地址、viewing key、salt</td>\n</tr>\n</tbody>\n</table>\n<p>金额是公开的；若应用要求金额保密，就需要另写一份陈述（statement）。salt 必须对每笔支付都保持新鲜且保密：复用的 salt 会把多笔支付关联起来，可猜测的 salt 则让任何人都能用候选接收方去比对 commitment。</p>\n<h3>5.3 一笔真实支付的成本（Zcash 测试网，0.01 TAZ，2026 年 10 月 30 日）</h3>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th>步骤</th>\n<th>实测值</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>guest 执行</td>\n<td>19,918,817 个周期，分 21 个 segment，0.9 秒</td>\n</tr>\n<tr>\n<td>STARK 回执，RTX 4090</td>\n<td>43.1 秒</td>\n</tr>\n<tr>\n<td>Groth16 包装，同一台机器</td>\n<td>34.2 秒；产出 260 字节的 seal</td>\n</tr>\n<tr>\n<td>在 Base Sepolia 分叉上调用 <code>verify</code>（含 Groth16 校验）</td>\n<td>256,720 gas</td>\n</tr>\n<tr>\n<td>证明的机器成本（按每小时 $0.52 租用）</td>\n<td>≈ $0.01</td>\n</tr>\n</tbody>\n</table>\n<p>CPU 目前还走不通：同样规模的证明在一台 4 核服务器上跑了 7 小时 58 分钟。Base Sepolia 上有一个正在运行的 verifier（<a href=\"https://sepolia.basescan.org/address/0x1701e16350A3F0E29DC45E75F356eAc9dAB8d5f9#code\" rel=\"noopener noreferrer\"><code>0x1701…d5f9</code></a>），任何人调用它，都能取回这笔支付的 journal。</p>\n<h3>5.4 需要信任什么，以及真正要紧的边界</h3>\n<p>需要信任的清单包括：RISC Zero 的证明系统及其 Groth16 setup；RISC Zero verifier router 的治理（它可以停用一个 verifier，但换不掉 selector 背后那一个：这属于活性风险，安全性不受影响）；固定下来的 image id，任何人都能在 RISC Zero 的 Docker builder 里重新构建出它；以及预发布版本的 Zcash crates，还有打过补丁、只为 zkVM 编译的 <code>pasta_curves</code>。</p>\n<p>真正要紧的边界是经济层面的。声明校验的是包含关系和 note；Zcash 的 Halo 2 证明和签名不在其中，后者的验证本来就是 Zcash 共识在区块被挖进中继所跟随那条链时的职责。攻击者私自挖出的链可以装进任意交易，所以<strong>应用在 anchor 之上要求的工作量，必须超过其所有未完成支付加在一起的价值</strong>。一次足够深的重组，就能给其中每一笔各伪造出一笔支付。</p>\n<h3>5.5 链之外的隐私</h3>\n<p>anchor 会暴露一个区块头，所以外界知道的是，这笔支付落在订单之后、T 之前的某个区块里。要让这个候选集合保持得足够大：先固定 anchor 高度，在一段随机延迟之后再付款，并且让支付和 anchor 处于同一个 epoch 里（ZIP 221 树在每次网络升级时都会重新开始）。</p>\n<p>构建 witness 时，需要按交易 id 向一台轻钱包服务器请求这笔交易，因此该服务器会知道正在证明的是什么，除非证明者自己运行一台，或者通过 Tor 连到一台。CLI 拒绝把 witness 交给远程证明者。</p>\n<h2>6. 局限</h2>\n<ul>\n<li>仅限测试网，且未经审计。</li>\n<li>检查点和网络参数是需要信任的部署输入。</li>\n<li>活性取决于是否有人持续向中继提供数据。</li>\n<li>到目前为止，只有一笔真实的测试网支付完成了证明。主网 guest 已经固定（pinned），但尚未证明任何一笔真实的主网支付。</li>\n<li>如今能生成证明的只有持有 viewing key 的收款方，或者用 <code>seam</code> CLI 完成支付的付款方：大多数钱包不导出 note 的 opening，而借助付款方 outgoing viewing key 做恢复也尚未实现。</li>\n<li>生成证明需要 GPU。</li>\n</ul>\n<h2>7. 相关工作</h2>\n<p>BTC Relay（2016）在以太坊上确立了链上 SPV 中继的做法。EIP-152 的立项动机正是实现同类的 Zcash 中继，Consensys 的 Project Alchemy 为此用 Solidity 实现了 BLAKE2b 和 Equihash。《Bridging Sapling: Private Cross-Chain Transfers》（arXiv:2204.10611）研究了 Zcash 与其他链之间的隐私转账。ZIP 221 为 FlyClient 式轻客户端引入了链历史承诺，《Catching the Fly》（arXiv:2604.26736）则讨论了让 FlyClient 真正走向实用需要哪些条件。</p>\n<h2>8. 开放问题</h2>\n<ol>\n<li><strong>跳过区块头。</strong> ZIP 221 的历史树当初是为 FlyClient 设计的。中继能否接受一份覆盖大量区块头的抽样证明，而不是逐个验证每个区块头？当验证方是 L2 合约时，哪些抽样参数和工作量参数才是安全的？</li>\n<li><strong>逐头检查还是 zkVM 批量证明。</strong> 按每天约 2.2 × 10⁹ gas 计算，与在链下对成批区块头生成证明、链上只验证一份证明相比，盈亏平衡点在哪里？</li>\n<li><strong>给所需工作量定规模。</strong> Equihash 算力是可以租用的。有没有一种有原则可循的方法，把应用要求的工作量与其未结义务总额挂钩来设定？这项约束应该由中继强制执行，还是由应用自己执行？</li>\n<li><strong>标准化。</strong> 为 EVM 链上的 PoW 链中继设计一个统一的读取接口，值不值得做成一个 ERC？支付备忘录（memo）格式和证明语句（statement）要不要写成一份 ZIP？</li>\n</ol>\n<p>非常欢迎反馈，尤其是共识检查、重组处理和第 5.4 节的经济约束这几个部分。</p>\n<p><strong>链接</strong></p>\n<ul>\n<li>仓库与 README：https://github.com/Himess/seam</li>\n<li>中继设计、每条规则的源码出处和 gas 表：<code>contracts/src/relay/README.md</code></li>\n<li>支付证明：<code>docs/PAYMENTS.md</code>；接入方式：<code>docs/INTEGRATING.md</code>；喂送数据：<code>docs/RELAYING.md</code></li>\n<li>Base Sepolia 上的中继：测试网 <a href=\"https://sepolia.basescan.org/address/0x77ceDADCFf8bE399C67AB579Ad739820FaC5cE0c#code\" rel=\"noopener noreferrer\"><code>0x77ce…cE0c</code></a>，主网 <a href=\"https://sepolia.basescan.org/address/0x527B6347d2392d17fa5Bd13DF88A43676501BE48#code\" rel=\"noopener noreferrer\"><code>0x527B…BE48</code></a></li>\n</ul>\n<p><em>披露：Seam 由本文作者设计，并借助 AI 编程助手构建。上文中的每个数字都链接到仓库里的某个测试、文件或交易。</em></p>\n"}}]]></xinzhi:versions>
+    </item>
     <item>
       <title>llama.cpp 与 ggml 发布 v1.0.0，API 与 ABI 破坏性变更将升级主版本号</title>
       <link>https://news.nofeetbird.tech/a/ggml-llama-cpp-v1-stable-api</link>
@@ -17,7 +909,7 @@
 <h2>中文改写</h2>
 <p>llama.cpp 让多模态 LLM 能够在广泛的硬件上运行，从消费级本地设备到高端企业服务器都可以覆盖。通过量化、经过优化的后端以及可移植的 C/C++ 实现，llama.cpp 让 AI 推理在软件栈的每一层都可用。团队相信，这是构建跨平台、保护隐私的 AI 产品时最轻量、最通用也最合理的平台。</p>
 <p>自 <a href="https://github.com/ggml-org/llama.cpp/commit/26c0846" rel="noopener noreferrer">首个提交</a> 以来的 3.5 年里，项目已经成长了许多，众多下游应用已经依赖 llama.cpp 的成果。本地 AI 和隐私保护在日常生活中的重要性不断提升，团队预计这一趋势仍将持续。每一次新的集成，都意味着更多开发者依赖这些库接口，因此提供一套灵活而稳定的 API 至关重要。</p>
-<p>今天，团队发布 <code>v1.0.0</code> 版本的库，以此表明对这些开发者肩负的责任。**从现在起，<a href="https://github.com/ggml-org/llama.cpp" rel="noopener noreferrer">llama.cpp</a> 和 <a href="https://github.com/ggml-org/ggml" rel="noopener noreferrer">ggml</a> 都会通过升级主版本号来标示 API 和 ABI 的不兼容变更。**采用规模越大，团队就会越严格地把这些边界清晰地呈现给下游使用者。</p>
+<p>今天，团队发布 <code>v1.0.0</code> 版本的库，以此表明对这些开发者肩负的责任。<strong>从现在起，<a href="https://github.com/ggml-org/llama.cpp" rel="noopener noreferrer">llama.cpp</a> 和 <a href="https://github.com/ggml-org/ggml" rel="noopener noreferrer">ggml</a> 都会通过升级主版本号来标示 API 和 ABI 的不兼容变更</strong>。采用规模越大，团队就会越严格地把这些边界清晰地呈现给下游使用者。</p>
 <h3>发布版本</h3>
 <table aria-label="数据表格，可横向滚动查看" tabindex="0">
 <thead>
@@ -243,7 +1135,7 @@
 <h2>中文改写</h2>
 <p>llama.cpp 让多模态 LLM 能够在广泛的硬件上运行，从消费级本地设备到高端企业服务器都可以覆盖。通过量化、经过优化的后端以及可移植的 C/C++ 实现，llama.cpp 让 AI 推理在软件栈的每一层都可用。团队相信，这是构建跨平台、保护隐私的 AI 产品时最轻量、最通用也最合理的平台。</p>
 <p>自 <a href="https://github.com/ggml-org/llama.cpp/commit/26c0846" rel="noopener noreferrer">首个提交</a> 以来的 3.5 年里，项目已经成长了许多，众多下游应用已经依赖 llama.cpp 的成果。本地 AI 和隐私保护在日常生活中的重要性不断提升，团队预计这一趋势仍将持续。每一次新的集成，都意味着更多开发者依赖这些库接口，因此提供一套灵活而稳定的 API 至关重要。</p>
-<p>今天，团队发布 <code>v1.0.0</code> 版本的库，以此表明对这些开发者肩负的责任。**从现在起，<a href="https://github.com/ggml-org/llama.cpp" rel="noopener noreferrer">llama.cpp</a> 和 <a href="https://github.com/ggml-org/ggml" rel="noopener noreferrer">ggml</a> 都会通过升级主版本号来标示 API 和 ABI 的不兼容变更。**采用规模越大，团队就会越严格地把这些边界清晰地呈现给下游使用者。</p>
+<p>今天，团队发布 <code>v1.0.0</code> 版本的库，以此表明对这些开发者肩负的责任。<strong>从现在起，<a href="https://github.com/ggml-org/llama.cpp" rel="noopener noreferrer">llama.cpp</a> 和 <a href="https://github.com/ggml-org/ggml" rel="noopener noreferrer">ggml</a> 都会通过升级主版本号来标示 API 和 ABI 的不兼容变更</strong>。采用规模越大，团队就会越严格地把这些边界清晰地呈现给下游使用者。</p>
 <h3>发布版本</h3>
 <table aria-label="数据表格，可横向滚动查看" tabindex="0">
 <thead>
@@ -465,7 +1357,7 @@
 </ul>
 <p><strong>原文链接：</strong><a href="https://huggingface.co/blog/ggml-org/llama-cpp-v1">https://huggingface.co/blog/ggml-org/llama-cpp-v1</a></p>
 <p><strong>相关链接：</strong><a href="https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0">https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0</a></p>]]></content:encoded>
-      <xinzhi:versions><![CDATA[{"version": 1, "original": {"title": "llama.cpp v1.0.0 : A stronger foundation for the local AI ecosystem", "url": "https://huggingface.co/blog/ggml-org/llama-cpp-v1", "lang": "en", "html": "<h2>llama.cpp v1.0.0 : A stronger foundation for the local AI ecosystem</h2>\n<p>原文由 Hugging Face 博客页面正文转换为 Markdown；页面标题、作者栏、目录、页面元数据中的封面图和文末评论区未收录。正文本身没有图片或视频。</p>\n\n<p>llama.cpp makes it possible to run multi-modal LLMs across a wide range of hardware - from consumer-grade local machines to high-end enterprise servers. Through quantization, optimized backends, and a portable C/C++ implementation, we make AI inference accessible at every level of the software stack. We believe this is the most lightweight, versatile and sensible platform for building cross-platform and private AI products.</p>\n<p>During the 3.5 years since its <a href=\"https://github.com/ggml-org/llama.cpp/commit/26c0846\" rel=\"noopener noreferrer\">inception</a>, the project has grown a lot and many downstream applications already depend on our work. We expect this trend to continue as local AI and privacy become increasingly important in our everyday lives. Every new integration means more developers depending on our library interfaces and therefore having a flexible but stable API is paramount.</p>\n<p>Today we release libraries <code>v1.0.0</code>, highlighting our responsibility to those developers. Moving forward, both <a href=\"https://github.com/ggml-org/llama.cpp\" rel=\"noopener noreferrer\">llama.cpp</a> and <a href=\"https://github.com/ggml-org/ggml\" rel=\"noopener noreferrer\">ggml</a> will reflect API and ABI incompatibilities with major-version bumps. As adoption grows, we will be stricter about making those boundaries visible to downstream consumers.</p>\n<h3>Releases</h3>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th>Release</th>\n<th>Library</th>\n<th>Public header(s)</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td><a href=\"https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0\" rel=\"noopener noreferrer\">llama.cpp v1.0.0</a> - LLM inference in C/C++</td>\n<td><code>libllama</code></td>\n<td><a href=\"https://github.com/ggml-org/llama.cpp/blob/master/include/\" rel=\"noopener noreferrer\"><code>llama.cpp/include/</code></a></td>\n</tr>\n<tr>\n<td><a href=\"https://github.com/ggml-org/ggml/releases/tag/v1.0.0\" rel=\"noopener noreferrer\">ggml v1.0.0</a> - Tensor library for machine learning</td>\n<td><code>libggml</code></td>\n<td><a href=\"https://github.com/ggml-org/llama.cpp/blob/master/ggml/include/\" rel=\"noopener noreferrer\"><code>ggml/include/</code></a></td>\n</tr>\n</tbody>\n</table>\n<h3>Semantic version update rules</h3>\n<p>The following rules apply to all <a href=\"https://huggingface.co/ggml-org\" rel=\"noopener noreferrer\">ggml-org</a> projects using <a href=\"https://semver.org\" rel=\"noopener noreferrer\">semantic versioning</a>:</p>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th>Change type</th>\n<th>Bump</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>MAJOR</td>\n<td>Breaking change to the public C API in <code>./include</code></td>\n</tr>\n<tr>\n<td>MINOR</td>\n<td>Backward-compatible feature, backend updates, model support, or API addition</td>\n</tr>\n<tr>\n<td>PATCH</td>\n<td>Bug fix with no API change</td>\n</tr>\n</tbody>\n</table>\n<h3>Distribution</h3>\n<p>We are looking forward to expanding the ways in which <code>ggml-org</code> software is distributed and reaches developers and end-users. For more information about how to add <code>ggml-org</code> projects to your packaging and release pipelines, please check the following <a href=\"https://github.com/ggml-org/ggml/discussions/1579\" rel=\"noopener noreferrer\">discussion</a>.</p>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th>Channel</th>\n<th>Platforms</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td><a href=\"https://github.com/ggml-org/llama.cpp/releases\" rel=\"noopener noreferrer\">Pre-release artifacts</a></td>\n<td>Linux, macOS, Windows, Android, iOS</td>\n</tr>\n<tr>\n<td>Docker</td>\n<td>Linux</td>\n</tr>\n<tr>\n<td>Debian</td>\n<td>Linux</td>\n</tr>\n<tr>\n<td>Homebrew</td>\n<td>macOS, Linux</td>\n</tr>\n<tr>\n<td>conda-forge</td>\n<td>Windows, macOS, Linux</td>\n</tr>\n<tr>\n<td>MacPorts</td>\n<td>macOS</td>\n</tr>\n<tr>\n<td>Winget</td>\n<td>Windows</td>\n</tr>\n<tr>\n<td>XCFramework</td>\n<td>iOS, macOS</td>\n</tr>\n</tbody>\n</table>\n<h3>Development</h3>\n<p>The project has fostered an amazing open-source community with highly-skilled and talented contributors. With the rapid advance of AI capabilities in the field of software engineering, we continue to adapt and integrate LLMs in our developement cycle in a thoughtful and resonable manner. Maintaining a high quality codebase, staying in control of the architecture and understanding the implementation details will remain our top priorities.</p>\n<p>To reinforce the faster pace of development we continue to invest more and more resources in improving the CI infrastructure behind the projects. Thanks to HF technologies such as <a href=\"https://huggingface.co/docs/huggingface_hub/en/guides/buckets\" rel=\"noopener noreferrer\">HF Buckets</a> and <a href=\"https://huggingface.co/docs/huggingface_hub/en/guides/jobs\" rel=\"noopener noreferrer\">HF Jobs</a> we are able to scale the capacity necessary to guarantee correctness for every change that lands on the <code>master</code> branches. With hardware support from NVIDIA, AMD, Qualcomm, Arm, IBM and Intel, we continue to enroll more self-hosted runners across all major hardware platforms.</p>\n<h3>Backend and model coverage</h3>\n<p>The underlying machine learning engine of <code>llama.cpp</code> - <code>ggml</code> is designed to run on virtually any hardware in existence. This is achieved by implementing dedicated ggml backends. Each backend can be compiled as a dynamic library and optionally loaded at runtime.</p>\n<p>A complete list of the currently implemented backends can be found <a href=\"https://github.com/ggml-org/ggml/tree/master/src\" rel=\"noopener noreferrer\">here</a>.</p>\n<p>We are committed to provide continuous support of all model architectures. Currently, llama.cpp supports more than <a href=\"https://github.com/ggml-org/llama.cpp/tree/master/src/models\" rel=\"noopener noreferrer\">150 architecture variants</a> as well as all mainstream speculative decoding methods.</p>\n<h3>Thanks</h3>\n<p>The llama.cpp team at Hugging Face is thankful for the incredible support from the community. Special thanks to the <a href=\"https://github.com/ggml-org/llama.cpp/blob/master/CODEOWNERS\" rel=\"noopener noreferrer\">long-time maintainers</a> of the project and all <a href=\"https://github.com/ggml-org/llama.cpp/graphs/contributors?from=8%2F8%2F2026\" rel=\"noopener noreferrer\">contributors</a>. This is a significant milestone which would not have been possible without our joint efforts!</p>\n<h3>Additional resources</h3>\n<ul>\n<li><a href=\"https://github.com/ggml-org/llama.cpp/tree/master/examples\" rel=\"noopener noreferrer\">llama.cpp examples</a></li>\n<li><a href=\"https://huggingface.co/ggml-org\" rel=\"noopener noreferrer\">ggml-org at Hugging Face</a></li>\n<li><a href=\"https://github.com/ggml-org\" rel=\"noopener noreferrer\">ggml-org at Github</a></li>\n<li>Check out <a href=\"https://llama.app/\" rel=\"noopener noreferrer\">Llama</a> desktop apps for MacOS and Windows, shipped with love by the team behind llama.cpp and Hugging Face.</li>\n</ul>\n<p>原文链接：<a href=\"https://huggingface.co/blog/ggml-org/llama-cpp-v1\">https://huggingface.co/blog/ggml-org/llama-cpp-v1</a></p>\n<p>相关链接：<a href=\"https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0\">https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0</a></p>"}, "rewrite": {"title": "llama.cpp 与 ggml 发布 v1.0.0，API 与 ABI 破坏性变更将升级主版本号", "markdown": "llama.cpp 让多模态 LLM 能够在广泛的硬件上运行，从消费级本地设备到高端企业服务器都可以覆盖。通过量化、经过优化的后端以及可移植的 C/C++ 实现，llama.cpp 让 AI 推理在软件栈的每一层都可用。团队相信，这是构建跨平台、保护隐私的 AI 产品时最轻量、最通用也最合理的平台。\n\n自 [首个提交](https://github.com/ggml-org/llama.cpp/commit/26c0846) 以来的 3.5 年里，项目已经成长了许多，众多下游应用已经依赖 llama.cpp 的成果。本地 AI 和隐私保护在日常生活中的重要性不断提升，团队预计这一趋势仍将持续。每一次新的集成，都意味着更多开发者依赖这些库接口，因此提供一套灵活而稳定的 API 至关重要。\n\n今天，团队发布 `v1.0.0` 版本的库，以此表明对这些开发者肩负的责任。**从现在起，[llama.cpp](https://github.com/ggml-org/llama.cpp) 和 [ggml](https://github.com/ggml-org/ggml) 都会通过升级主版本号来标示 API 和 ABI 的不兼容变更。**采用规模越大，团队就会越严格地把这些边界清晰地呈现给下游使用者。\n\n### 发布版本\n\n| 发布版本 | 库 | 公开头文件 |\n| --- | --- | --- |\n| [llama.cpp v1.0.0](https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0)：C/C++ 实现的 LLM 推理 | `libllama` | [`llama.cpp/include/`](https://github.com/ggml-org/llama.cpp/blob/master/include/) |\n| [ggml v1.0.0](https://github.com/ggml-org/ggml/releases/tag/v1.0.0)：面向机器学习的张量库 | `libggml` | [`ggml/include/`](https://github.com/ggml-org/llama.cpp/blob/master/ggml/include/) |\n\n### 语义化版本更新规则\n\n以下规则适用于所有使用[语义化版本](https://semver.org)的 [ggml-org](https://huggingface.co/ggml-org) 项目：\n\n| 变更类型 | 版本号升级 |\n| --- | --- |\n| MAJOR | `./include` 中的公开 C API 出现破坏性变更 |\n| MINOR | 向后兼容的新功能、后端更新、模型支持或 API 新增 |\n| PATCH | 不涉及 API 变更的缺陷修复 |\n\n### 分发渠道\n\n团队期待进一步拓展 `ggml-org` 软件的分发方式，让它触达更多开发者和最终用户。想了解如何把 `ggml-org` 项目接入自己的打包与发布流程，请查看这篇[讨论](https://github.com/ggml-org/ggml/discussions/1579)。\n\n| 渠道 | 平台 |\n| --- | --- |\n| [预发布构建产物](https://github.com/ggml-org/llama.cpp/releases) | Linux、macOS、Windows、Android、iOS |\n| Docker | Linux |\n| Debian | Linux |\n| Homebrew | macOS、Linux |\n| conda-forge | Windows、macOS、Linux |\n| MacPorts | macOS |\n| Winget | Windows |\n| XCFramework | iOS、macOS |\n\n### 开发\n\n项目培育出了一个出色的开源社区，聚集了一批技术高超、才华出众的贡献者。AI 在软件工程领域的能力正快速进步，团队会继续以审慎、合理的方式把 LLM 融入开发流程。保持高质量的代码库、掌控架构方向、理解实现细节，这些始终是团队的首要任务。\n\n为了支撑更快的开发节奏，团队持续投入越来越多的资源，改进项目背后的 CI 基础设施。借助 [HF Buckets](https://huggingface.co/docs/huggingface_hub/en/guides/buckets) 和 [HF Jobs](https://huggingface.co/docs/huggingface_hub/en/guides/jobs) 这样的 HF 技术，团队能够扩展出足够的容量，保证每个合入 `master` 分支的变更都通过正确性验证。在 NVIDIA、AMD、Qualcomm、Arm、IBM 和 Intel 的硬件支持下，团队还在为所有主流硬件平台接入更多自托管 runner。\n\n### 后端与模型覆盖\n\n`llama.cpp` 底层的机器学习引擎 `ggml` 的设计目标，是在几乎任何现存的硬件上运行。这一目标通过实现专门的 ggml 后端来达成，每个后端都可以编译成动态库，并在运行时按需加载。\n\n目前实现的后端完整列表可以在[这里](https://github.com/ggml-org/ggml/tree/master/src)查看。\n\n团队承诺持续支持所有模型架构。目前 llama.cpp 支持[超过 150 种架构变体](https://github.com/ggml-org/llama.cpp/tree/master/src/models)，以及所有主流的投机解码（speculative decoding）方法。\n\n### 致谢\n\nHugging Face 的 llama.cpp 团队衷心感谢社区给予的巨大支持。特别感谢项目的[长期维护者](https://github.com/ggml-org/llama.cpp/blob/master/CODEOWNERS)和所有[贡献者](https://github.com/ggml-org/llama.cpp/graphs/contributors?from=8%2F8%2F2026)。这是一个重要的里程碑，没有大家的共同努力就不可能实现！\n\n### 更多资源\n\n- [llama.cpp 示例](https://github.com/ggml-org/llama.cpp/tree/master/examples)\n- [Hugging Face 上的 ggml-org](https://huggingface.co/ggml-org)\n- [GitHub 上的 ggml-org](https://github.com/ggml-org)\n- 欢迎试用面向 macOS 和 Windows 的 [Llama](https://llama.app/) 桌面应用，由 llama.cpp 和 Hugging Face 背后的团队用心打造。", "html": "<p>llama.cpp 让多模态 LLM 能够在广泛的硬件上运行，从消费级本地设备到高端企业服务器都可以覆盖。通过量化、经过优化的后端以及可移植的 C/C++ 实现，llama.cpp 让 AI 推理在软件栈的每一层都可用。团队相信，这是构建跨平台、保护隐私的 AI 产品时最轻量、最通用也最合理的平台。</p>\n<p>自 <a href=\"https://github.com/ggml-org/llama.cpp/commit/26c0846\" rel=\"noopener noreferrer\">首个提交</a> 以来的 3.5 年里，项目已经成长了许多，众多下游应用已经依赖 llama.cpp 的成果。本地 AI 和隐私保护在日常生活中的重要性不断提升，团队预计这一趋势仍将持续。每一次新的集成，都意味着更多开发者依赖这些库接口，因此提供一套灵活而稳定的 API 至关重要。</p>\n<p>今天，团队发布 <code>v1.0.0</code> 版本的库，以此表明对这些开发者肩负的责任。**从现在起，<a href=\"https://github.com/ggml-org/llama.cpp\" rel=\"noopener noreferrer\">llama.cpp</a> 和 <a href=\"https://github.com/ggml-org/ggml\" rel=\"noopener noreferrer\">ggml</a> 都会通过升级主版本号来标示 API 和 ABI 的不兼容变更。**采用规模越大，团队就会越严格地把这些边界清晰地呈现给下游使用者。</p>\n<h3>发布版本</h3>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th>发布版本</th>\n<th>库</th>\n<th>公开头文件</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td><a href=\"https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0\" rel=\"noopener noreferrer\">llama.cpp v1.0.0</a>：C/C++ 实现的 LLM 推理</td>\n<td><code>libllama</code></td>\n<td><a href=\"https://github.com/ggml-org/llama.cpp/blob/master/include/\" rel=\"noopener noreferrer\"><code>llama.cpp/include/</code></a></td>\n</tr>\n<tr>\n<td><a href=\"https://github.com/ggml-org/ggml/releases/tag/v1.0.0\" rel=\"noopener noreferrer\">ggml v1.0.0</a>：面向机器学习的张量库</td>\n<td><code>libggml</code></td>\n<td><a href=\"https://github.com/ggml-org/llama.cpp/blob/master/ggml/include/\" rel=\"noopener noreferrer\"><code>ggml/include/</code></a></td>\n</tr>\n</tbody>\n</table>\n<h3>语义化版本更新规则</h3>\n<p>以下规则适用于所有使用<a href=\"https://semver.org\" rel=\"noopener noreferrer\">语义化版本</a>的 <a href=\"https://huggingface.co/ggml-org\" rel=\"noopener noreferrer\">ggml-org</a> 项目：</p>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th>变更类型</th>\n<th>版本号升级</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>MAJOR</td>\n<td><code>./include</code> 中的公开 C API 出现破坏性变更</td>\n</tr>\n<tr>\n<td>MINOR</td>\n<td>向后兼容的新功能、后端更新、模型支持或 API 新增</td>\n</tr>\n<tr>\n<td>PATCH</td>\n<td>不涉及 API 变更的缺陷修复</td>\n</tr>\n</tbody>\n</table>\n<h3>分发渠道</h3>\n<p>团队期待进一步拓展 <code>ggml-org</code> 软件的分发方式，让它触达更多开发者和最终用户。想了解如何把 <code>ggml-org</code> 项目接入自己的打包与发布流程，请查看这篇<a href=\"https://github.com/ggml-org/ggml/discussions/1579\" rel=\"noopener noreferrer\">讨论</a>。</p>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th>渠道</th>\n<th>平台</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td><a href=\"https://github.com/ggml-org/llama.cpp/releases\" rel=\"noopener noreferrer\">预发布构建产物</a></td>\n<td>Linux、macOS、Windows、Android、iOS</td>\n</tr>\n<tr>\n<td>Docker</td>\n<td>Linux</td>\n</tr>\n<tr>\n<td>Debian</td>\n<td>Linux</td>\n</tr>\n<tr>\n<td>Homebrew</td>\n<td>macOS、Linux</td>\n</tr>\n<tr>\n<td>conda-forge</td>\n<td>Windows、macOS、Linux</td>\n</tr>\n<tr>\n<td>MacPorts</td>\n<td>macOS</td>\n</tr>\n<tr>\n<td>Winget</td>\n<td>Windows</td>\n</tr>\n<tr>\n<td>XCFramework</td>\n<td>iOS、macOS</td>\n</tr>\n</tbody>\n</table>\n<h3>开发</h3>\n<p>项目培育出了一个出色的开源社区，聚集了一批技术高超、才华出众的贡献者。AI 在软件工程领域的能力正快速进步，团队会继续以审慎、合理的方式把 LLM 融入开发流程。保持高质量的代码库、掌控架构方向、理解实现细节，这些始终是团队的首要任务。</p>\n<p>为了支撑更快的开发节奏，团队持续投入越来越多的资源，改进项目背后的 CI 基础设施。借助 <a href=\"https://huggingface.co/docs/huggingface_hub/en/guides/buckets\" rel=\"noopener noreferrer\">HF Buckets</a> 和 <a href=\"https://huggingface.co/docs/huggingface_hub/en/guides/jobs\" rel=\"noopener noreferrer\">HF Jobs</a> 这样的 HF 技术，团队能够扩展出足够的容量，保证每个合入 <code>master</code> 分支的变更都通过正确性验证。在 NVIDIA、AMD、Qualcomm、Arm、IBM 和 Intel 的硬件支持下，团队还在为所有主流硬件平台接入更多自托管 runner。</p>\n<h3>后端与模型覆盖</h3>\n<p><code>llama.cpp</code> 底层的机器学习引擎 <code>ggml</code> 的设计目标，是在几乎任何现存的硬件上运行。这一目标通过实现专门的 ggml 后端来达成，每个后端都可以编译成动态库，并在运行时按需加载。</p>\n<p>目前实现的后端完整列表可以在<a href=\"https://github.com/ggml-org/ggml/tree/master/src\" rel=\"noopener noreferrer\">这里</a>查看。</p>\n<p>团队承诺持续支持所有模型架构。目前 llama.cpp 支持<a href=\"https://github.com/ggml-org/llama.cpp/tree/master/src/models\" rel=\"noopener noreferrer\">超过 150 种架构变体</a>，以及所有主流的投机解码（speculative decoding）方法。</p>\n<h3>致谢</h3>\n<p>Hugging Face 的 llama.cpp 团队衷心感谢社区给予的巨大支持。特别感谢项目的<a href=\"https://github.com/ggml-org/llama.cpp/blob/master/CODEOWNERS\" rel=\"noopener noreferrer\">长期维护者</a>和所有<a href=\"https://github.com/ggml-org/llama.cpp/graphs/contributors?from=8%2F8%2F2026\" rel=\"noopener noreferrer\">贡献者</a>。这是一个重要的里程碑，没有大家的共同努力就不可能实现！</p>\n<h3>更多资源</h3>\n<ul>\n<li><a href=\"https://github.com/ggml-org/llama.cpp/tree/master/examples\" rel=\"noopener noreferrer\">llama.cpp 示例</a></li>\n<li><a href=\"https://huggingface.co/ggml-org\" rel=\"noopener noreferrer\">Hugging Face 上的 ggml-org</a></li>\n<li><a href=\"https://github.com/ggml-org\" rel=\"noopener noreferrer\">GitHub 上的 ggml-org</a></li>\n<li>欢迎试用面向 macOS 和 Windows 的 <a href=\"https://llama.app/\" rel=\"noopener noreferrer\">Llama</a> 桌面应用，由 llama.cpp 和 Hugging Face 背后的团队用心打造。</li>\n</ul>\n"}}]]></xinzhi:versions>
+      <xinzhi:versions><![CDATA[{"version": 1, "original": {"title": "llama.cpp v1.0.0 : A stronger foundation for the local AI ecosystem", "url": "https://huggingface.co/blog/ggml-org/llama-cpp-v1", "lang": "en", "html": "<h2>llama.cpp v1.0.0 : A stronger foundation for the local AI ecosystem</h2>\n<p>原文由 Hugging Face 博客页面正文转换为 Markdown；页面标题、作者栏、目录、页面元数据中的封面图和文末评论区未收录。正文本身没有图片或视频。</p>\n\n<p>llama.cpp makes it possible to run multi-modal LLMs across a wide range of hardware - from consumer-grade local machines to high-end enterprise servers. Through quantization, optimized backends, and a portable C/C++ implementation, we make AI inference accessible at every level of the software stack. We believe this is the most lightweight, versatile and sensible platform for building cross-platform and private AI products.</p>\n<p>During the 3.5 years since its <a href=\"https://github.com/ggml-org/llama.cpp/commit/26c0846\" rel=\"noopener noreferrer\">inception</a>, the project has grown a lot and many downstream applications already depend on our work. We expect this trend to continue as local AI and privacy become increasingly important in our everyday lives. Every new integration means more developers depending on our library interfaces and therefore having a flexible but stable API is paramount.</p>\n<p>Today we release libraries <code>v1.0.0</code>, highlighting our responsibility to those developers. Moving forward, both <a href=\"https://github.com/ggml-org/llama.cpp\" rel=\"noopener noreferrer\">llama.cpp</a> and <a href=\"https://github.com/ggml-org/ggml\" rel=\"noopener noreferrer\">ggml</a> will reflect API and ABI incompatibilities with major-version bumps. As adoption grows, we will be stricter about making those boundaries visible to downstream consumers.</p>\n<h3>Releases</h3>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th>Release</th>\n<th>Library</th>\n<th>Public header(s)</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td><a href=\"https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0\" rel=\"noopener noreferrer\">llama.cpp v1.0.0</a> - LLM inference in C/C++</td>\n<td><code>libllama</code></td>\n<td><a href=\"https://github.com/ggml-org/llama.cpp/blob/master/include/\" rel=\"noopener noreferrer\"><code>llama.cpp/include/</code></a></td>\n</tr>\n<tr>\n<td><a href=\"https://github.com/ggml-org/ggml/releases/tag/v1.0.0\" rel=\"noopener noreferrer\">ggml v1.0.0</a> - Tensor library for machine learning</td>\n<td><code>libggml</code></td>\n<td><a href=\"https://github.com/ggml-org/llama.cpp/blob/master/ggml/include/\" rel=\"noopener noreferrer\"><code>ggml/include/</code></a></td>\n</tr>\n</tbody>\n</table>\n<h3>Semantic version update rules</h3>\n<p>The following rules apply to all <a href=\"https://huggingface.co/ggml-org\" rel=\"noopener noreferrer\">ggml-org</a> projects using <a href=\"https://semver.org\" rel=\"noopener noreferrer\">semantic versioning</a>:</p>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th>Change type</th>\n<th>Bump</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>MAJOR</td>\n<td>Breaking change to the public C API in <code>./include</code></td>\n</tr>\n<tr>\n<td>MINOR</td>\n<td>Backward-compatible feature, backend updates, model support, or API addition</td>\n</tr>\n<tr>\n<td>PATCH</td>\n<td>Bug fix with no API change</td>\n</tr>\n</tbody>\n</table>\n<h3>Distribution</h3>\n<p>We are looking forward to expanding the ways in which <code>ggml-org</code> software is distributed and reaches developers and end-users. For more information about how to add <code>ggml-org</code> projects to your packaging and release pipelines, please check the following <a href=\"https://github.com/ggml-org/ggml/discussions/1579\" rel=\"noopener noreferrer\">discussion</a>.</p>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th>Channel</th>\n<th>Platforms</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td><a href=\"https://github.com/ggml-org/llama.cpp/releases\" rel=\"noopener noreferrer\">Pre-release artifacts</a></td>\n<td>Linux, macOS, Windows, Android, iOS</td>\n</tr>\n<tr>\n<td>Docker</td>\n<td>Linux</td>\n</tr>\n<tr>\n<td>Debian</td>\n<td>Linux</td>\n</tr>\n<tr>\n<td>Homebrew</td>\n<td>macOS, Linux</td>\n</tr>\n<tr>\n<td>conda-forge</td>\n<td>Windows, macOS, Linux</td>\n</tr>\n<tr>\n<td>MacPorts</td>\n<td>macOS</td>\n</tr>\n<tr>\n<td>Winget</td>\n<td>Windows</td>\n</tr>\n<tr>\n<td>XCFramework</td>\n<td>iOS, macOS</td>\n</tr>\n</tbody>\n</table>\n<h3>Development</h3>\n<p>The project has fostered an amazing open-source community with highly-skilled and talented contributors. With the rapid advance of AI capabilities in the field of software engineering, we continue to adapt and integrate LLMs in our developement cycle in a thoughtful and resonable manner. Maintaining a high quality codebase, staying in control of the architecture and understanding the implementation details will remain our top priorities.</p>\n<p>To reinforce the faster pace of development we continue to invest more and more resources in improving the CI infrastructure behind the projects. Thanks to HF technologies such as <a href=\"https://huggingface.co/docs/huggingface_hub/en/guides/buckets\" rel=\"noopener noreferrer\">HF Buckets</a> and <a href=\"https://huggingface.co/docs/huggingface_hub/en/guides/jobs\" rel=\"noopener noreferrer\">HF Jobs</a> we are able to scale the capacity necessary to guarantee correctness for every change that lands on the <code>master</code> branches. With hardware support from NVIDIA, AMD, Qualcomm, Arm, IBM and Intel, we continue to enroll more self-hosted runners across all major hardware platforms.</p>\n<h3>Backend and model coverage</h3>\n<p>The underlying machine learning engine of <code>llama.cpp</code> - <code>ggml</code> is designed to run on virtually any hardware in existence. This is achieved by implementing dedicated ggml backends. Each backend can be compiled as a dynamic library and optionally loaded at runtime.</p>\n<p>A complete list of the currently implemented backends can be found <a href=\"https://github.com/ggml-org/ggml/tree/master/src\" rel=\"noopener noreferrer\">here</a>.</p>\n<p>We are committed to provide continuous support of all model architectures. Currently, llama.cpp supports more than <a href=\"https://github.com/ggml-org/llama.cpp/tree/master/src/models\" rel=\"noopener noreferrer\">150 architecture variants</a> as well as all mainstream speculative decoding methods.</p>\n<h3>Thanks</h3>\n<p>The llama.cpp team at Hugging Face is thankful for the incredible support from the community. Special thanks to the <a href=\"https://github.com/ggml-org/llama.cpp/blob/master/CODEOWNERS\" rel=\"noopener noreferrer\">long-time maintainers</a> of the project and all <a href=\"https://github.com/ggml-org/llama.cpp/graphs/contributors?from=8%2F8%2F2026\" rel=\"noopener noreferrer\">contributors</a>. This is a significant milestone which would not have been possible without our joint efforts!</p>\n<h3>Additional resources</h3>\n<ul>\n<li><a href=\"https://github.com/ggml-org/llama.cpp/tree/master/examples\" rel=\"noopener noreferrer\">llama.cpp examples</a></li>\n<li><a href=\"https://huggingface.co/ggml-org\" rel=\"noopener noreferrer\">ggml-org at Hugging Face</a></li>\n<li><a href=\"https://github.com/ggml-org\" rel=\"noopener noreferrer\">ggml-org at Github</a></li>\n<li>Check out <a href=\"https://llama.app/\" rel=\"noopener noreferrer\">Llama</a> desktop apps for MacOS and Windows, shipped with love by the team behind llama.cpp and Hugging Face.</li>\n</ul>\n<p>原文链接：<a href=\"https://huggingface.co/blog/ggml-org/llama-cpp-v1\">https://huggingface.co/blog/ggml-org/llama-cpp-v1</a></p>\n<p>相关链接：<a href=\"https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0\">https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0</a></p>"}, "rewrite": {"title": "llama.cpp 与 ggml 发布 v1.0.0，API 与 ABI 破坏性变更将升级主版本号", "markdown": "llama.cpp 让多模态 LLM 能够在广泛的硬件上运行，从消费级本地设备到高端企业服务器都可以覆盖。通过量化、经过优化的后端以及可移植的 C/C++ 实现，llama.cpp 让 AI 推理在软件栈的每一层都可用。团队相信，这是构建跨平台、保护隐私的 AI 产品时最轻量、最通用也最合理的平台。\n\n自 [首个提交](https://github.com/ggml-org/llama.cpp/commit/26c0846) 以来的 3.5 年里，项目已经成长了许多，众多下游应用已经依赖 llama.cpp 的成果。本地 AI 和隐私保护在日常生活中的重要性不断提升，团队预计这一趋势仍将持续。每一次新的集成，都意味着更多开发者依赖这些库接口，因此提供一套灵活而稳定的 API 至关重要。\n\n今天，团队发布 `v1.0.0` 版本的库，以此表明对这些开发者肩负的责任。**从现在起，[llama.cpp](https://github.com/ggml-org/llama.cpp) 和 [ggml](https://github.com/ggml-org/ggml) 都会通过升级主版本号来标示 API 和 ABI 的不兼容变更**。采用规模越大，团队就会越严格地把这些边界清晰地呈现给下游使用者。\n\n### 发布版本\n\n| 发布版本 | 库 | 公开头文件 |\n| --- | --- | --- |\n| [llama.cpp v1.0.0](https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0)：C/C++ 实现的 LLM 推理 | `libllama` | [`llama.cpp/include/`](https://github.com/ggml-org/llama.cpp/blob/master/include/) |\n| [ggml v1.0.0](https://github.com/ggml-org/ggml/releases/tag/v1.0.0)：面向机器学习的张量库 | `libggml` | [`ggml/include/`](https://github.com/ggml-org/llama.cpp/blob/master/ggml/include/) |\n\n### 语义化版本更新规则\n\n以下规则适用于所有使用[语义化版本](https://semver.org)的 [ggml-org](https://huggingface.co/ggml-org) 项目：\n\n| 变更类型 | 版本号升级 |\n| --- | --- |\n| MAJOR | `./include` 中的公开 C API 出现破坏性变更 |\n| MINOR | 向后兼容的新功能、后端更新、模型支持或 API 新增 |\n| PATCH | 不涉及 API 变更的缺陷修复 |\n\n### 分发渠道\n\n团队期待进一步拓展 `ggml-org` 软件的分发方式，让它触达更多开发者和最终用户。想了解如何把 `ggml-org` 项目接入自己的打包与发布流程，请查看这篇[讨论](https://github.com/ggml-org/ggml/discussions/1579)。\n\n| 渠道 | 平台 |\n| --- | --- |\n| [预发布构建产物](https://github.com/ggml-org/llama.cpp/releases) | Linux、macOS、Windows、Android、iOS |\n| Docker | Linux |\n| Debian | Linux |\n| Homebrew | macOS、Linux |\n| conda-forge | Windows、macOS、Linux |\n| MacPorts | macOS |\n| Winget | Windows |\n| XCFramework | iOS、macOS |\n\n### 开发\n\n项目培育出了一个出色的开源社区，聚集了一批技术高超、才华出众的贡献者。AI 在软件工程领域的能力正快速进步，团队会继续以审慎、合理的方式把 LLM 融入开发流程。保持高质量的代码库、掌控架构方向、理解实现细节，这些始终是团队的首要任务。\n\n为了支撑更快的开发节奏，团队持续投入越来越多的资源，改进项目背后的 CI 基础设施。借助 [HF Buckets](https://huggingface.co/docs/huggingface_hub/en/guides/buckets) 和 [HF Jobs](https://huggingface.co/docs/huggingface_hub/en/guides/jobs) 这样的 HF 技术，团队能够扩展出足够的容量，保证每个合入 `master` 分支的变更都通过正确性验证。在 NVIDIA、AMD、Qualcomm、Arm、IBM 和 Intel 的硬件支持下，团队还在为所有主流硬件平台接入更多自托管 runner。\n\n### 后端与模型覆盖\n\n`llama.cpp` 底层的机器学习引擎 `ggml` 的设计目标，是在几乎任何现存的硬件上运行。这一目标通过实现专门的 ggml 后端来达成，每个后端都可以编译成动态库，并在运行时按需加载。\n\n目前实现的后端完整列表可以在[这里](https://github.com/ggml-org/ggml/tree/master/src)查看。\n\n团队承诺持续支持所有模型架构。目前 llama.cpp 支持[超过 150 种架构变体](https://github.com/ggml-org/llama.cpp/tree/master/src/models)，以及所有主流的投机解码（speculative decoding）方法。\n\n### 致谢\n\nHugging Face 的 llama.cpp 团队衷心感谢社区给予的巨大支持。特别感谢项目的[长期维护者](https://github.com/ggml-org/llama.cpp/blob/master/CODEOWNERS)和所有[贡献者](https://github.com/ggml-org/llama.cpp/graphs/contributors?from=8%2F8%2F2026)。这是一个重要的里程碑，没有大家的共同努力就不可能实现！\n\n### 更多资源\n\n- [llama.cpp 示例](https://github.com/ggml-org/llama.cpp/tree/master/examples)\n- [Hugging Face 上的 ggml-org](https://huggingface.co/ggml-org)\n- [GitHub 上的 ggml-org](https://github.com/ggml-org)\n- 欢迎试用面向 macOS 和 Windows 的 [Llama](https://llama.app/) 桌面应用，由 llama.cpp 和 Hugging Face 背后的团队用心打造。", "html": "<p>llama.cpp 让多模态 LLM 能够在广泛的硬件上运行，从消费级本地设备到高端企业服务器都可以覆盖。通过量化、经过优化的后端以及可移植的 C/C++ 实现，llama.cpp 让 AI 推理在软件栈的每一层都可用。团队相信，这是构建跨平台、保护隐私的 AI 产品时最轻量、最通用也最合理的平台。</p>\n<p>自 <a href=\"https://github.com/ggml-org/llama.cpp/commit/26c0846\" rel=\"noopener noreferrer\">首个提交</a> 以来的 3.5 年里，项目已经成长了许多，众多下游应用已经依赖 llama.cpp 的成果。本地 AI 和隐私保护在日常生活中的重要性不断提升，团队预计这一趋势仍将持续。每一次新的集成，都意味着更多开发者依赖这些库接口，因此提供一套灵活而稳定的 API 至关重要。</p>\n<p>今天，团队发布 <code>v1.0.0</code> 版本的库，以此表明对这些开发者肩负的责任。<strong>从现在起，<a href=\"https://github.com/ggml-org/llama.cpp\" rel=\"noopener noreferrer\">llama.cpp</a> 和 <a href=\"https://github.com/ggml-org/ggml\" rel=\"noopener noreferrer\">ggml</a> 都会通过升级主版本号来标示 API 和 ABI 的不兼容变更</strong>。采用规模越大，团队就会越严格地把这些边界清晰地呈现给下游使用者。</p>\n<h3>发布版本</h3>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th>发布版本</th>\n<th>库</th>\n<th>公开头文件</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td><a href=\"https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0\" rel=\"noopener noreferrer\">llama.cpp v1.0.0</a>：C/C++ 实现的 LLM 推理</td>\n<td><code>libllama</code></td>\n<td><a href=\"https://github.com/ggml-org/llama.cpp/blob/master/include/\" rel=\"noopener noreferrer\"><code>llama.cpp/include/</code></a></td>\n</tr>\n<tr>\n<td><a href=\"https://github.com/ggml-org/ggml/releases/tag/v1.0.0\" rel=\"noopener noreferrer\">ggml v1.0.0</a>：面向机器学习的张量库</td>\n<td><code>libggml</code></td>\n<td><a href=\"https://github.com/ggml-org/llama.cpp/blob/master/ggml/include/\" rel=\"noopener noreferrer\"><code>ggml/include/</code></a></td>\n</tr>\n</tbody>\n</table>\n<h3>语义化版本更新规则</h3>\n<p>以下规则适用于所有使用<a href=\"https://semver.org\" rel=\"noopener noreferrer\">语义化版本</a>的 <a href=\"https://huggingface.co/ggml-org\" rel=\"noopener noreferrer\">ggml-org</a> 项目：</p>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th>变更类型</th>\n<th>版本号升级</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>MAJOR</td>\n<td><code>./include</code> 中的公开 C API 出现破坏性变更</td>\n</tr>\n<tr>\n<td>MINOR</td>\n<td>向后兼容的新功能、后端更新、模型支持或 API 新增</td>\n</tr>\n<tr>\n<td>PATCH</td>\n<td>不涉及 API 变更的缺陷修复</td>\n</tr>\n</tbody>\n</table>\n<h3>分发渠道</h3>\n<p>团队期待进一步拓展 <code>ggml-org</code> 软件的分发方式，让它触达更多开发者和最终用户。想了解如何把 <code>ggml-org</code> 项目接入自己的打包与发布流程，请查看这篇<a href=\"https://github.com/ggml-org/ggml/discussions/1579\" rel=\"noopener noreferrer\">讨论</a>。</p>\n<table aria-label=\"数据表格，可横向滚动查看\" tabindex=\"0\">\n<thead>\n<tr>\n<th>渠道</th>\n<th>平台</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td><a href=\"https://github.com/ggml-org/llama.cpp/releases\" rel=\"noopener noreferrer\">预发布构建产物</a></td>\n<td>Linux、macOS、Windows、Android、iOS</td>\n</tr>\n<tr>\n<td>Docker</td>\n<td>Linux</td>\n</tr>\n<tr>\n<td>Debian</td>\n<td>Linux</td>\n</tr>\n<tr>\n<td>Homebrew</td>\n<td>macOS、Linux</td>\n</tr>\n<tr>\n<td>conda-forge</td>\n<td>Windows、macOS、Linux</td>\n</tr>\n<tr>\n<td>MacPorts</td>\n<td>macOS</td>\n</tr>\n<tr>\n<td>Winget</td>\n<td>Windows</td>\n</tr>\n<tr>\n<td>XCFramework</td>\n<td>iOS、macOS</td>\n</tr>\n</tbody>\n</table>\n<h3>开发</h3>\n<p>项目培育出了一个出色的开源社区，聚集了一批技术高超、才华出众的贡献者。AI 在软件工程领域的能力正快速进步，团队会继续以审慎、合理的方式把 LLM 融入开发流程。保持高质量的代码库、掌控架构方向、理解实现细节，这些始终是团队的首要任务。</p>\n<p>为了支撑更快的开发节奏，团队持续投入越来越多的资源，改进项目背后的 CI 基础设施。借助 <a href=\"https://huggingface.co/docs/huggingface_hub/en/guides/buckets\" rel=\"noopener noreferrer\">HF Buckets</a> 和 <a href=\"https://huggingface.co/docs/huggingface_hub/en/guides/jobs\" rel=\"noopener noreferrer\">HF Jobs</a> 这样的 HF 技术，团队能够扩展出足够的容量，保证每个合入 <code>master</code> 分支的变更都通过正确性验证。在 NVIDIA、AMD、Qualcomm、Arm、IBM 和 Intel 的硬件支持下，团队还在为所有主流硬件平台接入更多自托管 runner。</p>\n<h3>后端与模型覆盖</h3>\n<p><code>llama.cpp</code> 底层的机器学习引擎 <code>ggml</code> 的设计目标，是在几乎任何现存的硬件上运行。这一目标通过实现专门的 ggml 后端来达成，每个后端都可以编译成动态库，并在运行时按需加载。</p>\n<p>目前实现的后端完整列表可以在<a href=\"https://github.com/ggml-org/ggml/tree/master/src\" rel=\"noopener noreferrer\">这里</a>查看。</p>\n<p>团队承诺持续支持所有模型架构。目前 llama.cpp 支持<a href=\"https://github.com/ggml-org/llama.cpp/tree/master/src/models\" rel=\"noopener noreferrer\">超过 150 种架构变体</a>，以及所有主流的投机解码（speculative decoding）方法。</p>\n<h3>致谢</h3>\n<p>Hugging Face 的 llama.cpp 团队衷心感谢社区给予的巨大支持。特别感谢项目的<a href=\"https://github.com/ggml-org/llama.cpp/blob/master/CODEOWNERS\" rel=\"noopener noreferrer\">长期维护者</a>和所有<a href=\"https://github.com/ggml-org/llama.cpp/graphs/contributors?from=8%2F8%2F2026\" rel=\"noopener noreferrer\">贡献者</a>。这是一个重要的里程碑，没有大家的共同努力就不可能实现！</p>\n<h3>更多资源</h3>\n<ul>\n<li><a href=\"https://github.com/ggml-org/llama.cpp/tree/master/examples\" rel=\"noopener noreferrer\">llama.cpp 示例</a></li>\n<li><a href=\"https://huggingface.co/ggml-org\" rel=\"noopener noreferrer\">Hugging Face 上的 ggml-org</a></li>\n<li><a href=\"https://github.com/ggml-org\" rel=\"noopener noreferrer\">GitHub 上的 ggml-org</a></li>\n<li>欢迎试用面向 macOS 和 Windows 的 <a href=\"https://llama.app/\" rel=\"noopener noreferrer\">Llama</a> 桌面应用，由 llama.cpp 和 Hugging Face 背后的团队用心打造。</li>\n</ul>\n"}}]]></xinzhi:versions>
     </item>
     <item>
       <title>一个基础费管不住两种资源：EIP-7999 多维定价与一维费用机制的模拟对比</title>
