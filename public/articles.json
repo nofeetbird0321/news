@@ -1,5 +1,19 @@
 [
   {
+    "id": "ggml-llama-cpp-v1-stable-api",
+    "date": "2026-11-13",
+    "title": "llama.cpp 与 ggml 发布 v1.0.0，API 与 ABI 破坏性变更将升级主版本号",
+    "dek": "llama.cpp 发布 v1.0.0，ggml 同步发布 v1.0.0。项目启动 3.5 年后，团队承诺今后用主版本号标示公开 C API 与 ABI 的不兼容变更，同时扩充 Docker、Homebrew、conda-forge 等分发渠道；目前 llama.cpp 支持超过 150 种模型架构变体。",
+    "url": "/a/ggml-llama-cpp-v1-stable-api",
+    "source_url": "https://huggingface.co/blog/ggml-org/llama-cpp-v1",
+    "tags": [
+      "AI",
+      "llama.cpp",
+      "本地推理",
+      "开源"
+    ]
+  },
+  {
     "id": "fei-wu-one-vs-multidimensional-fees-eip7999",
     "date": "2026-11-12",
     "title": "一个基础费管不住两种资源：EIP-7999 多维定价与一维费用机制的模拟对比",

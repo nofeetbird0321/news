@@ -1,0 +1,229 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>llama.cpp 与 ggml 发布 v1.0.0，API 与 ABI 破坏性变更将升级主版本号 · 新知</title><meta name="robots" content="noindex"></head><body><article class="article-reader" data-article-id="ggml-llama-cpp-v1-stable-api">
+<a class="article-back" href="/">← 返回选刊</a>
+<header class="article-header"><p class="article-kicker">Daniel Bevenius, Georgi Gerganov, merve (ggml-org) / 文章</p><h1>llama.cpp 与 ggml 发布 v1.0.0，API 与 ABI 破坏性变更将升级主版本号</h1><p class="article-dek">llama.cpp 发布 v1.0.0，ggml 同步发布 v1.0.0。项目启动 3.5 年后，团队承诺今后用主版本号标示公开 C API 与 ABI 的不兼容变更，同时扩充 Docker、Homebrew、conda-forge 等分发渠道；目前 llama.cpp 支持超过 150 种模型架构变体。</p><div class="article-meta"><time datetime="2026-11-14">本站收录 2026年11月14日 · 周六</time><span>原文发布 2026年11月13日 · 周五</span><span>原作者：Daniel Bevenius, Georgi Gerganov, merve (ggml-org)</span><span>中文改写：<a href="/about">新知</a></span><span>AI · llama.cpp · 本地推理 · 开源</span></div></header>
+<nav class="reader-tabs" aria-label="文章版本与来源"><div data-tabs><a href="#rewrite" id="tab-rewrite" data-view="rewrite">中文改写</a><a href="#original" id="tab-original" data-view="original">原文</a></div><a class="reader-source" href="https://huggingface.co/blog/ggml-org/llama-cpp-v1" target="_blank" rel="noopener noreferrer">原文链接 ↗</a><div class="reading-position" hidden><progress max="100" value="0" aria-label="当前版本阅读进度"></progress><span data-reading-percent aria-hidden="true">0%</span></div></nav>
+<section class="reader-panel" id="rewrite" data-reader-panel="rewrite" aria-label="中文改写"><h2 class="section-heading">中文改写</h2><div class="prose"><p>llama.cpp 让多模态 LLM 能够在广泛的硬件上运行，从消费级本地设备到高端企业服务器都可以覆盖。通过量化、经过优化的后端以及可移植的 C/C++ 实现，llama.cpp 让 AI 推理在软件栈的每一层都可用。团队相信，这是构建跨平台、保护隐私的 AI 产品时最轻量、最通用也最合理的平台。</p>
+<p>自 <a href="https://github.com/ggml-org/llama.cpp/commit/26c0846" rel="noopener noreferrer">首个提交</a> 以来的 3.5 年里，项目已经成长了许多，众多下游应用已经依赖 llama.cpp 的成果。本地 AI 和隐私保护在日常生活中的重要性不断提升，团队预计这一趋势仍将持续。每一次新的集成，都意味着更多开发者依赖这些库接口，因此提供一套灵活而稳定的 API 至关重要。</p>
+<p>今天，团队发布 <code>v1.0.0</code> 版本的库，以此表明对这些开发者肩负的责任。**从现在起，<a href="https://github.com/ggml-org/llama.cpp" rel="noopener noreferrer">llama.cpp</a> 和 <a href="https://github.com/ggml-org/ggml" rel="noopener noreferrer">ggml</a> 都会通过升级主版本号来标示 API 和 ABI 的不兼容变更。**采用规模越大，团队就会越严格地把这些边界清晰地呈现给下游使用者。</p>
+<h3>发布版本</h3>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>发布版本</th>
+<th>库</th>
+<th>公开头文件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0" rel="noopener noreferrer">llama.cpp v1.0.0</a>：C/C++ 实现的 LLM 推理</td>
+<td><code>libllama</code></td>
+<td><a href="https://github.com/ggml-org/llama.cpp/blob/master/include/" rel="noopener noreferrer"><code>llama.cpp/include/</code></a></td>
+</tr>
+<tr>
+<td><a href="https://github.com/ggml-org/ggml/releases/tag/v1.0.0" rel="noopener noreferrer">ggml v1.0.0</a>：面向机器学习的张量库</td>
+<td><code>libggml</code></td>
+<td><a href="https://github.com/ggml-org/llama.cpp/blob/master/ggml/include/" rel="noopener noreferrer"><code>ggml/include/</code></a></td>
+</tr>
+</tbody>
+</table>
+<h3>语义化版本更新规则</h3>
+<p>以下规则适用于所有使用<a href="https://semver.org" rel="noopener noreferrer">语义化版本</a>的 <a href="https://huggingface.co/ggml-org" rel="noopener noreferrer">ggml-org</a> 项目：</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>变更类型</th>
+<th>版本号升级</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MAJOR</td>
+<td><code>./include</code> 中的公开 C API 出现破坏性变更</td>
+</tr>
+<tr>
+<td>MINOR</td>
+<td>向后兼容的新功能、后端更新、模型支持或 API 新增</td>
+</tr>
+<tr>
+<td>PATCH</td>
+<td>不涉及 API 变更的缺陷修复</td>
+</tr>
+</tbody>
+</table>
+<h3>分发渠道</h3>
+<p>团队期待进一步拓展 <code>ggml-org</code> 软件的分发方式，让它触达更多开发者和最终用户。想了解如何把 <code>ggml-org</code> 项目接入自己的打包与发布流程，请查看这篇<a href="https://github.com/ggml-org/ggml/discussions/1579" rel="noopener noreferrer">讨论</a>。</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>渠道</th>
+<th>平台</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://github.com/ggml-org/llama.cpp/releases" rel="noopener noreferrer">预发布构建产物</a></td>
+<td>Linux、macOS、Windows、Android、iOS</td>
+</tr>
+<tr>
+<td>Docker</td>
+<td>Linux</td>
+</tr>
+<tr>
+<td>Debian</td>
+<td>Linux</td>
+</tr>
+<tr>
+<td>Homebrew</td>
+<td>macOS、Linux</td>
+</tr>
+<tr>
+<td>conda-forge</td>
+<td>Windows、macOS、Linux</td>
+</tr>
+<tr>
+<td>MacPorts</td>
+<td>macOS</td>
+</tr>
+<tr>
+<td>Winget</td>
+<td>Windows</td>
+</tr>
+<tr>
+<td>XCFramework</td>
+<td>iOS、macOS</td>
+</tr>
+</tbody>
+</table>
+<h3>开发</h3>
+<p>项目培育出了一个出色的开源社区，聚集了一批技术高超、才华出众的贡献者。AI 在软件工程领域的能力正快速进步，团队会继续以审慎、合理的方式把 LLM 融入开发流程。保持高质量的代码库、掌控架构方向、理解实现细节，这些始终是团队的首要任务。</p>
+<p>为了支撑更快的开发节奏，团队持续投入越来越多的资源，改进项目背后的 CI 基础设施。借助 <a href="https://huggingface.co/docs/huggingface_hub/en/guides/buckets" rel="noopener noreferrer">HF Buckets</a> 和 <a href="https://huggingface.co/docs/huggingface_hub/en/guides/jobs" rel="noopener noreferrer">HF Jobs</a> 这样的 HF 技术，团队能够扩展出足够的容量，保证每个合入 <code>master</code> 分支的变更都通过正确性验证。在 NVIDIA、AMD、Qualcomm、Arm、IBM 和 Intel 的硬件支持下，团队还在为所有主流硬件平台接入更多自托管 runner。</p>
+<h3>后端与模型覆盖</h3>
+<p><code>llama.cpp</code> 底层的机器学习引擎 <code>ggml</code> 的设计目标，是在几乎任何现存的硬件上运行。这一目标通过实现专门的 ggml 后端来达成，每个后端都可以编译成动态库，并在运行时按需加载。</p>
+<p>目前实现的后端完整列表可以在<a href="https://github.com/ggml-org/ggml/tree/master/src" rel="noopener noreferrer">这里</a>查看。</p>
+<p>团队承诺持续支持所有模型架构。目前 llama.cpp 支持<a href="https://github.com/ggml-org/llama.cpp/tree/master/src/models" rel="noopener noreferrer">超过 150 种架构变体</a>，以及所有主流的投机解码（speculative decoding）方法。</p>
+<h3>致谢</h3>
+<p>Hugging Face 的 llama.cpp 团队衷心感谢社区给予的巨大支持。特别感谢项目的<a href="https://github.com/ggml-org/llama.cpp/blob/master/CODEOWNERS" rel="noopener noreferrer">长期维护者</a>和所有<a href="https://github.com/ggml-org/llama.cpp/graphs/contributors?from=8%2F8%2F2026" rel="noopener noreferrer">贡献者</a>。这是一个重要的里程碑，没有大家的共同努力就不可能实现！</p>
+<h3>更多资源</h3>
+<ul>
+<li><a href="https://github.com/ggml-org/llama.cpp/tree/master/examples" rel="noopener noreferrer">llama.cpp 示例</a></li>
+<li><a href="https://huggingface.co/ggml-org" rel="noopener noreferrer">Hugging Face 上的 ggml-org</a></li>
+<li><a href="https://github.com/ggml-org" rel="noopener noreferrer">GitHub 上的 ggml-org</a></li>
+<li>欢迎试用面向 macOS 和 Windows 的 <a href="https://llama.app/" rel="noopener noreferrer">Llama</a> 桌面应用，由 llama.cpp 和 Hugging Face 背后的团队用心打造。</li>
+</ul>
+</div></section>
+<section class="reader-panel" id="original" data-reader-panel="original" aria-label="原文">
+<h2 class="section-heading">原文</h2><p class="completeness-note">原文由 Hugging Face 博客页面正文转换为 Markdown；页面标题、作者栏、目录、页面元数据中的封面图和文末评论区未收录。正文本身没有图片或视频。</p><h3 class="original-title">llama.cpp v1.0.0 : A stronger foundation for the local AI ecosystem</h3>
+
+<div class="prose" lang="en"><p>llama.cpp makes it possible to run multi-modal LLMs across a wide range of hardware - from consumer-grade local machines to high-end enterprise servers. Through quantization, optimized backends, and a portable C/C++ implementation, we make AI inference accessible at every level of the software stack. We believe this is the most lightweight, versatile and sensible platform for building cross-platform and private AI products.</p>
+<p>During the 3.5 years since its <a href="https://github.com/ggml-org/llama.cpp/commit/26c0846" rel="noopener noreferrer">inception</a>, the project has grown a lot and many downstream applications already depend on our work. We expect this trend to continue as local AI and privacy become increasingly important in our everyday lives. Every new integration means more developers depending on our library interfaces and therefore having a flexible but stable API is paramount.</p>
+<p>Today we release libraries <code>v1.0.0</code>, highlighting our responsibility to those developers. Moving forward, both <a href="https://github.com/ggml-org/llama.cpp" rel="noopener noreferrer">llama.cpp</a> and <a href="https://github.com/ggml-org/ggml" rel="noopener noreferrer">ggml</a> will reflect API and ABI incompatibilities with major-version bumps. As adoption grows, we will be stricter about making those boundaries visible to downstream consumers.</p>
+<h3>Releases</h3>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>Release</th>
+<th>Library</th>
+<th>Public header(s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0" rel="noopener noreferrer">llama.cpp v1.0.0</a> - LLM inference in C/C++</td>
+<td><code>libllama</code></td>
+<td><a href="https://github.com/ggml-org/llama.cpp/blob/master/include/" rel="noopener noreferrer"><code>llama.cpp/include/</code></a></td>
+</tr>
+<tr>
+<td><a href="https://github.com/ggml-org/ggml/releases/tag/v1.0.0" rel="noopener noreferrer">ggml v1.0.0</a> - Tensor library for machine learning</td>
+<td><code>libggml</code></td>
+<td><a href="https://github.com/ggml-org/llama.cpp/blob/master/ggml/include/" rel="noopener noreferrer"><code>ggml/include/</code></a></td>
+</tr>
+</tbody>
+</table>
+<h3>Semantic version update rules</h3>
+<p>The following rules apply to all <a href="https://huggingface.co/ggml-org" rel="noopener noreferrer">ggml-org</a> projects using <a href="https://semver.org" rel="noopener noreferrer">semantic versioning</a>:</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>Change type</th>
+<th>Bump</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MAJOR</td>
+<td>Breaking change to the public C API in <code>./include</code></td>
+</tr>
+<tr>
+<td>MINOR</td>
+<td>Backward-compatible feature, backend updates, model support, or API addition</td>
+</tr>
+<tr>
+<td>PATCH</td>
+<td>Bug fix with no API change</td>
+</tr>
+</tbody>
+</table>
+<h3>Distribution</h3>
+<p>We are looking forward to expanding the ways in which <code>ggml-org</code> software is distributed and reaches developers and end-users. For more information about how to add <code>ggml-org</code> projects to your packaging and release pipelines, please check the following <a href="https://github.com/ggml-org/ggml/discussions/1579" rel="noopener noreferrer">discussion</a>.</p>
+<table aria-label="数据表格，可横向滚动查看" tabindex="0">
+<thead>
+<tr>
+<th>Channel</th>
+<th>Platforms</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://github.com/ggml-org/llama.cpp/releases" rel="noopener noreferrer">Pre-release artifacts</a></td>
+<td>Linux, macOS, Windows, Android, iOS</td>
+</tr>
+<tr>
+<td>Docker</td>
+<td>Linux</td>
+</tr>
+<tr>
+<td>Debian</td>
+<td>Linux</td>
+</tr>
+<tr>
+<td>Homebrew</td>
+<td>macOS, Linux</td>
+</tr>
+<tr>
+<td>conda-forge</td>
+<td>Windows, macOS, Linux</td>
+</tr>
+<tr>
+<td>MacPorts</td>
+<td>macOS</td>
+</tr>
+<tr>
+<td>Winget</td>
+<td>Windows</td>
+</tr>
+<tr>
+<td>XCFramework</td>
+<td>iOS, macOS</td>
+</tr>
+</tbody>
+</table>
+<h3>Development</h3>
+<p>The project has fostered an amazing open-source community with highly-skilled and talented contributors. With the rapid advance of AI capabilities in the field of software engineering, we continue to adapt and integrate LLMs in our developement cycle in a thoughtful and resonable manner. Maintaining a high quality codebase, staying in control of the architecture and understanding the implementation details will remain our top priorities.</p>
+<p>To reinforce the faster pace of development we continue to invest more and more resources in improving the CI infrastructure behind the projects. Thanks to HF technologies such as <a href="https://huggingface.co/docs/huggingface_hub/en/guides/buckets" rel="noopener noreferrer">HF Buckets</a> and <a href="https://huggingface.co/docs/huggingface_hub/en/guides/jobs" rel="noopener noreferrer">HF Jobs</a> we are able to scale the capacity necessary to guarantee correctness for every change that lands on the <code>master</code> branches. With hardware support from NVIDIA, AMD, Qualcomm, Arm, IBM and Intel, we continue to enroll more self-hosted runners across all major hardware platforms.</p>
+<h3>Backend and model coverage</h3>
+<p>The underlying machine learning engine of <code>llama.cpp</code> - <code>ggml</code> is designed to run on virtually any hardware in existence. This is achieved by implementing dedicated ggml backends. Each backend can be compiled as a dynamic library and optionally loaded at runtime.</p>
+<p>A complete list of the currently implemented backends can be found <a href="https://github.com/ggml-org/ggml/tree/master/src" rel="noopener noreferrer">here</a>.</p>
+<p>We are committed to provide continuous support of all model architectures. Currently, llama.cpp supports more than <a href="https://github.com/ggml-org/llama.cpp/tree/master/src/models" rel="noopener noreferrer">150 architecture variants</a> as well as all mainstream speculative decoding methods.</p>
+<h3>Thanks</h3>
+<p>The llama.cpp team at Hugging Face is thankful for the incredible support from the community. Special thanks to the <a href="https://github.com/ggml-org/llama.cpp/blob/master/CODEOWNERS" rel="noopener noreferrer">long-time maintainers</a> of the project and all <a href="https://github.com/ggml-org/llama.cpp/graphs/contributors?from=8%2F8%2F2026" rel="noopener noreferrer">contributors</a>. This is a significant milestone which would not have been possible without our joint efforts!</p>
+<h3>Additional resources</h3>
+<ul>
+<li><a href="https://github.com/ggml-org/llama.cpp/tree/master/examples" rel="noopener noreferrer">llama.cpp examples</a></li>
+<li><a href="https://huggingface.co/ggml-org" rel="noopener noreferrer">ggml-org at Hugging Face</a></li>
+<li><a href="https://github.com/ggml-org" rel="noopener noreferrer">ggml-org at Github</a></li>
+<li>Check out <a href="https://llama.app/" rel="noopener noreferrer">Llama</a> desktop apps for MacOS and Windows, shipped with love by the team behind llama.cpp and Hugging Face.</li>
+</ul></div>
+</section>
+<footer class="source-box"><span>内容来自原作者；中文为新知编辑改写，非逐字翻译。</span><div><a href="https://huggingface.co/blog/ggml-org/llama-cpp-v1" target="_blank" rel="noopener noreferrer">打开原文 ↗</a><a href="https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0" target="_blank" rel="noopener noreferrer">相关链接 ↗</a></div></footer>
+</article></body></html>
